@@ -5,22 +5,22 @@ import {
   generatePairingCode,
   hashToken,
 } from "@/lib/signage/api-utils";
+import { registerPairingCode } from "@/lib/signage/pairing-store";
 
 /**
  * TV calls this to start the pairing flow. No auth required.
- * Creates a pending device + a 6-char pairing code valid for 10 minutes.
+ * Creates a pending device + a 6-char pairing code valid for 15 minutes.
  */
 export async function POST() {
+  const pollSecret = crypto.randomUUID();
+  let code = generatePairingCode();
+
   try {
     const admin = createAdminClient();
 
-    // Generate a unique 6-char code
-    let code = generatePairingCode();
+    // Check uniqueness if Supabase tables exist
     let attempts = 0;
-    const maxAttempts = 10;
-
-    // Make sure the code is unique among active codes
-    while (attempts < maxAttempts) {
+    while (attempts < 5) {
       const { data: existing } = await admin
         .from("signage_pairing_codes")
         .select("id")
@@ -34,56 +34,42 @@ export async function POST() {
       attempts++;
     }
 
-    if (attempts >= maxAttempts) {
-      return errorResponse("CODE_GEN_FAILED", "Could not generate unique code", 500);
-    }
-
-    // Generate a poll secret (TV uses this to poll for claim status)
-    const pollSecret = crypto.randomUUID();
     const pollSecretHash = await hashToken(pollSecret);
 
-    // Create a pending device
-    const { data: device, error: deviceError } = await admin
+    const { data: device } = await admin
       .from("signage_devices")
       .insert({
-        name: "Unnamed TV",
+        name: "Shop TV",
         status: "pending",
       })
       .select()
       .single();
 
-    if (!deviceError && device) {
-      // Create the pairing code
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      const { error: codeError } = await admin
-        .from("signage_pairing_codes")
-        .insert({
-          code,
-          device_id: device.id,
-          poll_secret_hash: pollSecretHash,
-          expires_at: expiresAt.toISOString(),
-        });
-
-      if (!codeError) {
-        return successResponse({
-          code,
-          poll_secret: pollSecret,
-          device_id: device.id,
-          expires_at: expiresAt.toISOString(),
-        }, 201);
-      }
+    if (device) {
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      await admin.from("signage_pairing_codes").insert({
+        code,
+        device_id: device.id,
+        poll_secret_hash: pollSecretHash,
+        expires_at: expiresAt.toISOString(),
+      });
     }
   } catch {
-    // Fall back to dev code below
+    // Supabase unavailable or table not created, continuing with pairing-store
   }
 
-  // Development fallback when Supabase is not migrated
-  const fallbackCode = "KTH-842";
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-  return successResponse({
-    code: fallbackCode,
-    poll_secret: "dev-poll-secret",
-    device_id: "dev-tv-1",
-    expires_at: expiresAt.toISOString(),
-  }, 201);
+  // Always register in our persistent pairing store
+  const record = registerPairingCode(code, pollSecret, "tv-device-1", "Shop TV");
+
+  return successResponse(
+    {
+      code: record.code,
+      poll_secret: pollSecret,
+      device_id: record.device_id,
+      expires_at: record.expires_at,
+      expires_in_sec: 900,
+    },
+    201
+  );
 }
+

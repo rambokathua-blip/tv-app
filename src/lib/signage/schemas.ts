@@ -124,8 +124,9 @@ export const updateDeviceSchema = z.object({
 export const claimPairingSchema = z.object({
   code: z
     .string()
-    .length(6)
-    .regex(/^[A-Z2-9]{6}$/),
+    .min(5)
+    .max(12)
+    .transform((val) => val.replace(/[^A-Z0-9]/gi, "").toUpperCase()),
 });
 
 export const deviceCommandEnum = z.enum([
