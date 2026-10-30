@@ -6,32 +6,50 @@ import {
   parseBody,
 } from "@/lib/signage/api-utils";
 import { reorderPlaylistSchema } from "@/lib/signage/schemas";
+import { devStore } from "@/lib/signage/dev-store";
 
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const { data: playlist } = await admin
-    .from("signage_playlists")
-    .select("id, name, is_default")
-    .eq("is_default", true)
-    .single();
+    const { data: playlist } = await admin
+      .from("signage_playlists")
+      .select("id, name, is_default")
+      .eq("is_default", true)
+      .single();
 
-  if (!playlist) {
-    return errorResponse("NOT_FOUND", "No default playlist found", 404);
+    if (playlist) {
+      const { data: items, error } = await admin
+        .from("signage_playlist_items")
+        .select("*, promotion:signage_promotions(*, media:signage_media(*))")
+        .eq("playlist_id", playlist.id)
+        .order("position");
+
+      if (!error && items) {
+        return successResponse({ ...playlist, items: items ?? [] });
+      }
+    }
+  } catch {
+    // fallback to devStore
   }
 
-  const { data: items, error } = await admin
-    .from("signage_playlist_items")
-    .select("*, promotion:signage_promotions(*, media:signage_media(*))")
-    .eq("playlist_id", playlist.id)
-    .order("position");
+  // devStore fallback
+  const items = devStore.playlist.map((item) => ({
+    ...item,
+    promotion:
+      devStore.promotions.find((p) => p.id === item.promotion_id) ||
+      item.promotion,
+  }));
 
-  if (error) return errorResponse("DB_ERROR", error.message, 500);
-
-  return successResponse({ ...playlist, items: items ?? [] });
+  return successResponse({
+    id: "default",
+    name: "Default Store Playlist",
+    is_default: true,
+    items,
+  });
 }
 
 export async function POST(request: Request) {
@@ -51,40 +69,62 @@ export async function POST(request: Request) {
     return errorResponse("VALIDATION_ERROR", "promotion_id is required", 400);
   }
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const { data: playlist } = await admin
-    .from("signage_playlists")
-    .select("id")
-    .eq("is_default", true)
-    .single();
+    const { data: playlist } = await admin
+      .from("signage_playlists")
+      .select("id")
+      .eq("is_default", true)
+      .single();
 
-  if (!playlist) {
-    return errorResponse("NOT_FOUND", "No default playlist found", 404);
+    if (playlist) {
+      // Get the next position
+      const { data: lastItem } = await admin
+        .from("signage_playlist_items")
+        .select("position")
+        .eq("playlist_id", playlist.id)
+        .order("position", { ascending: false })
+        .limit(1)
+        .single();
+
+      const nextPosition = (lastItem?.position ?? -1) + 1;
+
+      const { data, error } = await admin
+        .from("signage_playlist_items")
+        .insert({
+          playlist_id: playlist.id,
+          promotion_id,
+          position: nextPosition,
+          duration_override_sec: duration_override_sec ?? null,
+        })
+        .select("*, promotion:signage_promotions(*, media:signage_media(*))")
+        .single();
+
+      if (!error && data) {
+        return successResponse(data, 201);
+      }
+    }
+  } catch {
+    // fallback to devStore
   }
 
-  // Get the next position
-  const { data: lastItem } = await admin
-    .from("signage_playlist_items")
-    .select("position")
-    .eq("playlist_id", playlist.id)
-    .order("position", { ascending: false })
-    .limit(1)
-    .single();
-
-  const nextPosition = (lastItem?.position ?? -1) + 1;
-
-  const { data, error } = await admin
-    .from("signage_playlist_items")
-    .insert({
-      playlist_id: playlist.id,
+  // devStore fallback
+  const existing = devStore.playlist.find((p) => p.promotion_id === promotion_id);
+  if (!existing) {
+    const newItem = {
+      id: "pl-" + Date.now(),
+      playlist_id: "default",
       promotion_id,
-      position: nextPosition,
+      position: devStore.playlist.length + 1,
       duration_override_sec: duration_override_sec ?? null,
-    })
-    .select("*, promotion:signage_promotions(*, media:signage_media(*))")
-    .single();
+      enabled: true,
+      promotion: devStore.promotions.find((p) => p.id === promotion_id),
+    };
+    devStore.playlist.push(newItem);
+    devStore.publish();
+    return successResponse(newItem, 201);
+  }
 
-  if (error) return errorResponse("DB_ERROR", error.message, 500);
-  return successResponse(data, 201);
+  return successResponse(existing, 200);
 }

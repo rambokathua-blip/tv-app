@@ -178,9 +178,10 @@ class DevStore {
         if (!promo || !promo.enabled) return null;
 
         let imgUrl =
-          promo.media?.storage_path && promo.media.storage_path !== "demo"
+          promo.media_id ||
+          (promo.media?.storage_path && promo.media.storage_path !== "demo"
             ? promo.media.storage_path
-            : promo.media?.thumb_path || "";
+            : promo.media?.thumb_path || "");
 
         if (imgUrl && this.mediaMap[imgUrl]) {
           imgUrl = this.mediaMap[imgUrl];
