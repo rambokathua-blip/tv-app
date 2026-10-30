@@ -253,12 +253,18 @@ export default function TvPlayerPage() {
 
         // Generate QR code for admin quick pair URL
         const adminPairUrl = `${window.location.origin}/admin/signage/more/devices?code=${data.code}`;
-        const dataUrl = await QRCode.toDataURL(adminPairUrl, {
-          margin: 1,
-          width: 300,
-          color: { dark: "#0f172a", light: "#ffffff" },
-        });
-        setPairingQrSvg(dataUrl);
+        try {
+          const dataUrl = await QRCode.toDataURL(adminPairUrl, {
+            margin: 1,
+            width: 300,
+            color: { dark: "#0f172a", light: "#ffffff" },
+          });
+          setPairingQrSvg(dataUrl);
+        } catch {
+          setPairingQrSvg(
+            `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(adminPairUrl)}`
+          );
+        }
       }
     } catch {
       // Offline or network error
@@ -663,25 +669,27 @@ export default function TvPlayerPage() {
                 alignItems: "center",
                 justifyContent: "center",
                 overflow: "hidden",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
               }}
             >
-              {pairingQrSvg ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={pairingQrSvg}
-                  alt="Pairing QR Code"
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    display: "block",
-                  }}
-                />
-              ) : (
-                <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600 }}>
-                  Generating QR...
-                </div>
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={
+                  pairingQrSvg ||
+                  `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/admin/signage/more/devices?code=${pairingCode}`
+                      : `https://tv-app-5wzh.vercel.app/admin/signage/more/devices?code=${pairingCode}`
+                  )}`
+                }
+                alt="Pairing QR Code"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
             </div>
 
             <div style={{ textAlign: "left" }}>
