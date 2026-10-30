@@ -14,12 +14,15 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import NewOfferModal from "@/components/signage/NewOfferModal";
 
 export default function SignageDashboardPage() {
   const [isTvOnline, setIsTvOnline] = useState(true);
   const [isTvPaused, setIsTvPaused] = useState(false);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [currentVersion, setCurrentVersion] = useState(1);
   const [stats, setStats] = useState({
     liveOffers: 3,
@@ -65,6 +68,14 @@ export default function SignageDashboardPage() {
       }
     }
     loadStats();
+
+    // Load initial audio status
+    fetch("/api/signage/admin/audio")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.enabled === "boolean") setIsAudioEnabled(data.enabled);
+      })
+      .catch(() => {});
   }, []);
 
   const handleTvCommand = async (command: "pause" | "resume" | "next") => {
@@ -79,6 +90,22 @@ export default function SignageDashboardPage() {
           : "TV paused"
       );
       setTimeout(() => setActionMessage(null), 3000);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleToggleAudio = async () => {
+    const nextState = !isAudioEnabled;
+    setIsAudioEnabled(nextState);
+    setActionMessage(nextState ? "Store Audio: ON (TV Syncing)" : "Store Audio: MUTED (TV Syncing)");
+    setTimeout(() => setActionMessage(null), 3000);
+    try {
+      await fetch("/api/signage/admin/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: nextState }),
+      });
     } catch {
       // ignore
     }
@@ -121,10 +148,10 @@ export default function SignageDashboardPage() {
         </div>
 
         {/* Quick Action Controls */}
-        <div className="grid grid-cols-2 gap-2.5 pt-3.5">
+        <div className="grid grid-cols-3 gap-2 pt-3.5">
           <button
             onClick={() => handleTvCommand(isTvPaused ? "resume" : "pause")}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl text-xs font-bold transition-colors ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-2xl text-[11px] font-bold transition-colors ${
               isTvPaused
                 ? "bg-amber-500 hover:bg-amber-400 text-slate-950"
                 : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
@@ -132,12 +159,12 @@ export default function SignageDashboardPage() {
           >
             {isTvPaused ? (
               <>
-                <Play className="w-4 h-4 fill-current" />
+                <Play className="w-3.5 h-3.5 fill-current" />
                 <span>Resume TV</span>
               </>
             ) : (
               <>
-                <Pause className="w-4 h-4 fill-current" />
+                <Pause className="w-3.5 h-3.5 fill-current" />
                 <span>Pause TV</span>
               </>
             )}
@@ -145,10 +172,31 @@ export default function SignageDashboardPage() {
 
           <button
             onClick={() => handleTvCommand("next")}
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors"
+            className="flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition-colors"
           >
-            <SkipForward className="w-4 h-4" />
+            <SkipForward className="w-3.5 h-3.5" />
             <span>Next Slide</span>
+          </button>
+
+          <button
+            onClick={handleToggleAudio}
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-2xl text-[11px] font-bold transition-colors ${
+              isAudioEnabled
+                ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40"
+                : "bg-slate-800/80 hover:bg-slate-800 text-slate-400 border border-slate-700"
+            }`}
+          >
+            {isAudioEnabled ? (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Audio: ON</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-red-400" />
+                <span>Audio: OFF</span>
+              </>
+            )}
           </button>
         </div>
 

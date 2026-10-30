@@ -60,6 +60,12 @@ const FALLBACK_MANIFEST: SignageManifest = {
         "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?q=80&w=1920&auto=format&fit=crop",
     },
   ],
+  audio: {
+    enabled: true,
+    url: "/store-audio.mp3",
+    volume: 0.8,
+    loop: true,
+  },
 };
 
 declare global {
@@ -88,6 +94,87 @@ export default function TvPlayerPage() {
   const [slideProgress, setSlideProgress] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+
+  // Background Audio State & Controls
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+
+  // Sync background audio with manifest and user preference
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
+    const isRemotelyEnabled = audioConfig?.enabled ?? true;
+    const shouldPlay = isRemotelyEnabled && !isAudioMuted;
+
+    if (audioConfig?.volume !== undefined) {
+      audio.volume = Math.max(0, Math.min(1, audioConfig.volume));
+    }
+
+    if (shouldPlay) {
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsAudioPlaying(true);
+            setAutoplayBlocked(false);
+          })
+          .catch(() => {
+            // Browser autoplay restrictions blocked audio
+            setIsAudioPlaying(false);
+            setAutoplayBlocked(true);
+          });
+      }
+    } else {
+      audio.pause();
+      setIsAudioPlaying(false);
+    }
+  }, [manifest.audio, isAudioMuted]);
+
+  // Click / Key gesture to unblock autoplay
+  useEffect(() => {
+    const handleGesture = () => {
+      if (autoplayBlocked && audioRef.current && !isAudioMuted) {
+        audioRef.current
+          .play()
+          .then(() => {
+            setIsAudioPlaying(true);
+            setAutoplayBlocked(false);
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener("click", handleGesture);
+    window.addEventListener("keydown", handleGesture);
+    return () => {
+      window.removeEventListener("click", handleGesture);
+      window.removeEventListener("keydown", handleGesture);
+    };
+  }, [autoplayBlocked, isAudioMuted]);
+
+  const toggleTvAudio = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isAudioMuted || audio.paused) {
+      audio.muted = false;
+      audio
+        .play()
+        .then(() => {
+          setIsAudioMuted(false);
+          setIsAudioPlaying(true);
+          setAutoplayBlocked(false);
+        })
+        .catch(() => {});
+    } else {
+      audio.pause();
+      setIsAudioMuted(true);
+      setIsAudioPlaying(false);
+    }
+  };
 
   // Initialize and check token or preview mode
   useEffect(() => {
@@ -776,6 +863,48 @@ export default function TvPlayerPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            {/* TV Audio Mute / Unmute Toggle Button */}
+            <button
+              onClick={toggleTvAudio}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 24px",
+                borderRadius: 30,
+                backgroundColor: !isAudioMuted && isAudioPlaying
+                  ? "rgba(16, 185, 129, 0.25)"
+                  : "rgba(239, 68, 68, 0.2)",
+                border: `2px solid ${!isAudioMuted && isAudioPlaying ? "#10b981" : "#f87171"}`,
+                color: !isAudioMuted && isAudioPlaying ? "#34d399" : "#fca5a5",
+                fontSize: 18,
+                fontWeight: 800,
+                cursor: "pointer",
+                boxShadow: !isAudioMuted && isAudioPlaying
+                  ? "0 0 20px rgba(16, 185, 129, 0.4)"
+                  : "none",
+                outline: "none",
+                transition: "all 0.2s ease",
+              }}
+            >
+              {!isAudioMuted && isAudioPlaying ? (
+                <>
+                  <span style={{ fontSize: 22 }}>🔊</span>
+                  <span>AUDIO ON</span>
+                  <span style={{ display: "inline-flex", gap: 3, alignItems: "flex-end", height: 16, marginLeft: 2 }}>
+                    <span style={{ width: 3, height: "100%", backgroundColor: "#34d399", borderRadius: 2 }} />
+                    <span style={{ width: 3, height: "60%", backgroundColor: "#34d399", borderRadius: 2 }} />
+                    <span style={{ width: 3, height: "85%", backgroundColor: "#34d399", borderRadius: 2 }} />
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 22 }}>🔇</span>
+                  <span>AUDIO MUTED (Click to Play)</span>
+                </>
+              )}
+            </button>
+
             <div
               style={{
                 padding: "8px 20px",
@@ -845,6 +974,35 @@ export default function TvPlayerPage() {
         />
       )}
 
+      {/* Autoplay prompt banner if browser blocked audio initially */}
+      {autoplayBlocked && (
+        <button
+          onClick={toggleTvAudio}
+          style={{
+            position: "absolute",
+            top: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#f59e0b",
+            color: "#0f172a",
+            padding: "14px 32px",
+            borderRadius: 30,
+            fontWeight: 900,
+            fontSize: 22,
+            cursor: "pointer",
+            boxShadow: "0 10px 30px rgba(245, 158, 11, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            zIndex: 1000,
+            border: "none",
+          }}
+        >
+          <span style={{ fontSize: 26 }}>🔊</span>
+          <span>Click to Unmute / आवाज़ शुरू करें</span>
+        </button>
+      )}
+
       {/* Preview Label (PRD 9.8) */}
       {isPreview && (
         <div
@@ -862,12 +1020,25 @@ export default function TvPlayerPage() {
             letterSpacing: 2,
             textTransform: "uppercase",
             boxShadow: "0 8px 20px rgba(0,0,0,0.5)",
-            zIndex: 1000,
+            zIndex: 999,
           }}
         >
           PREVIEW MODE — NOT LIVE ON TV
         </div>
       )}
+
+      {/* Background Audio Player */}
+      <audio
+        ref={audioRef}
+        src={manifest.audio?.url || "/store-audio.mp3"}
+        loop={manifest.audio?.loop ?? true}
+        preload="auto"
+        onPlay={() => {
+          setIsAudioPlaying(true);
+          setAutoplayBlocked(false);
+        }}
+        onPause={() => setIsAudioPlaying(false)}
+      />
     </div>
   );
 }

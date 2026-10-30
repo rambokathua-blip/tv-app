@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Mic,
   Volume2,
   VolumeX,
   Play,
+  Pause,
   Clock,
   Plus,
   Sparkles,
   CheckCircle2,
   Radio,
+  Music,
 } from "lucide-react";
 
 interface AnnouncementItem {
@@ -28,6 +30,22 @@ export default function VoiceAnnouncementsPage() {
   const [frequencyMinutes, setFrequencyMinutes] = useState(3);
   const [quietHoursStart, setQuietHoursStart] = useState("21:00");
   const [quietHoursEnd, setQuietHoursEnd] = useState("08:00");
+
+  // Continuous background audio states
+  const [audioBgEnabled, setAudioBgEnabled] = useState(true);
+  const [audioBgVolume, setAudioBgVolume] = useState(80);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const phoneAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    fetch("/api/signage/admin/audio")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.enabled === "boolean") setAudioBgEnabled(data.enabled);
+        if (typeof data.volume === "number") setAudioBgVolume(data.volume);
+      })
+      .catch(() => {});
+  }, []);
 
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([
     {
@@ -80,6 +98,48 @@ export default function VoiceAnnouncementsPage() {
     setTimeout(() => setFeedbackMsg(null), 3000);
   };
 
+  const handleToggleBgAudio = async (enabled: boolean) => {
+    setAudioBgEnabled(enabled);
+    setFeedbackMsg(enabled ? "Store background audio enabled on TV" : "Store background audio muted on TV");
+    setTimeout(() => setFeedbackMsg(null), 3000);
+    try {
+      await fetch("/api/signage/admin/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleUpdateBgVolume = async (vol: number) => {
+    setAudioBgVolume(vol);
+    try {
+      await fetch("/api/signage/admin/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volume: vol }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handlePreviewPhoneAudio = () => {
+    if (!phoneAudioRef.current) return;
+    if (isPreviewPlaying) {
+      phoneAudioRef.current.pause();
+      setIsPreviewPlaying(false);
+    } else {
+      phoneAudioRef.current.volume = audioBgVolume / 100;
+      phoneAudioRef.current
+        .play()
+        .then(() => setIsPreviewPlaying(true))
+        .catch(() => {});
+    }
+  };
+
   const frequencies = [
     { label: "Every 2m", val: 2 },
     { label: "Every 3m", val: 3 },
@@ -92,7 +152,7 @@ export default function VoiceAnnouncementsPage() {
       <div>
         <h1 className="text-lg font-bold text-white">Voice & Audio</h1>
         <p className="text-xs text-slate-400">
-          Smart Hindi & English speech announcements for the shop TV
+          Smart Hindi & English speech announcements & background store audio
         </p>
       </div>
 
@@ -102,6 +162,104 @@ export default function VoiceAnnouncementsPage() {
           <span>{feedbackMsg}</span>
         </div>
       )}
+
+      {/* Store Background Audio / Jingle Card */}
+      <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className={`p-2.5 rounded-2xl ${
+                audioBgEnabled
+                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              <Music className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Store Background Audio</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold uppercase">
+                  MP3 Jingle
+                </span>
+              </div>
+              <div className="text-xs text-slate-400">
+                {audioBgEnabled ? "Continuous Loop on TV Screen" : "Muted on TV Screen"}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => handleToggleBgAudio(!audioBgEnabled)}
+            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
+              audioBgEnabled ? "bg-emerald-500 justify-end" : "bg-slate-700 justify-start"
+            }`}
+          >
+            <div className="bg-slate-950 w-4 h-4 rounded-full shadow-md transform transition-transform" />
+          </button>
+        </div>
+
+        <div className="pt-2 border-t border-slate-800 space-y-3.5">
+          {/* Audio track info */}
+          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
+            <div className="min-w-0 pr-2">
+              <div className="text-xs font-bold text-slate-200 truncate">
+                ElevenLabs - Bunty (Punchy, Crisp)
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                /store-audio.mp3 • Continuous Loop
+              </div>
+            </div>
+
+            <button
+              onClick={handlePreviewPhoneAudio}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                isPreviewPlaying
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+              }`}
+            >
+              {isPreviewPlaying ? (
+                <>
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  <span>Stop Preview</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Listen on Phone</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Volume control */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1.5">
+              <span className="flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                TV Audio Volume
+              </span>
+              <span className="text-emerald-400">{audioBgVolume}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={audioBgVolume}
+              onChange={(e) => handleUpdateBgVolume(Number(e.target.value))}
+              className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+            />
+          </div>
+        </div>
+
+        {/* Hidden audio element for phone preview */}
+        <audio
+          ref={phoneAudioRef}
+          src="/store-audio.mp3"
+          onEnded={() => setIsPreviewPlaying(false)}
+        />
+      </div>
 
       {/* Master Audio Switch & Settings (PRD 9.5) */}
       <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">

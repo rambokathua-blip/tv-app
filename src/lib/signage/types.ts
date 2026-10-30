@@ -154,4 +154,10 @@ export interface SignageManifest {
     settings: VoiceSettings;
     announcements: Announcement[];
   };
+  audio?: {
+    enabled: boolean;
+    url: string;
+    volume: number;
+    loop: boolean;
+  };
 }

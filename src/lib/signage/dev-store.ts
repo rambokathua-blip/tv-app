@@ -103,7 +103,23 @@ class DevStore {
     },
   ];
 
+  audioSettings = {
+    enabled: true,
+    url: "/store-audio.mp3",
+    volume: 80, // 0 - 100
+    loop: true,
+  };
+
   version: number = 1;
+
+  updateAudio(settings: Partial<{ enabled: boolean; url: string; volume: number; loop: boolean }>) {
+    this.audioSettings = {
+      ...this.audioSettings,
+      ...settings,
+    };
+    this.publish();
+    return this.audioSettings;
+  }
 
   addPromotion(promo: Omit<Promotion, "id" | "created_at" | "updated_at">): Promotion {
     const id = "promo-" + Date.now();
@@ -165,6 +181,12 @@ class DevStore {
       },
       qr_codes: this.qrCodes.filter((q) => q.enabled),
       slides: activePromos as any,
+      audio: {
+        enabled: this.audioSettings.enabled,
+        url: this.audioSettings.url,
+        volume: this.audioSettings.volume / 100,
+        loop: this.audioSettings.loop,
+      },
     };
   }
 
