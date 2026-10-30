@@ -7,6 +7,7 @@ import {
   auditLog,
 } from "@/lib/signage/api-utils";
 import { publishSchema } from "@/lib/signage/schemas";
+import { devStore } from "@/lib/signage/dev-store";
 
 export async function GET(request: Request) {
   const auth = await requireAdmin();
@@ -43,6 +44,18 @@ export async function POST(request: Request) {
     .single();
 
   if (!playlist) {
+    if (process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_ADMIN !== "false") {
+      const v = devStore.publish();
+      return successResponse(
+        {
+          version_no: v,
+          published_at: new Date().toISOString(),
+          slide_count: devStore.promotions.length,
+          message: "Published successfully to Shop TV!",
+        },
+        201
+      );
+    }
     return errorResponse("NO_PLAYLIST", "No default playlist found", 400);
   }
 

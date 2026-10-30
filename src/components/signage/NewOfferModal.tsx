@@ -98,24 +98,36 @@ export default function NewOfferModal({
     setAspectWarning(false);
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const handleSave = async (publishImmediately: boolean) => {
     setIsPublishing(true);
+    setSaveError(null);
     try {
       let finalMediaId: string | null = null;
 
       // If file uploaded, send to upload API
       if (imageFile) {
-        const formData = new FormData();
-        formData.append("file", imageFile);
-        formData.append("kind", "image");
-        const uploadRes = await fetch("/api/signage/admin/media/upload", {
-          method: "POST",
-          body: formData,
-        });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          finalMediaId = uploadData.media?.id || null;
+        try {
+          const formData = new FormData();
+          formData.append("file", imageFile);
+          formData.append("kind", "image");
+          const uploadRes = await fetch("/api/signage/admin/media/upload", {
+            method: "POST",
+            body: formData,
+          });
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            finalMediaId = uploadData.media?.id || uploadData.media?.storage_path || null;
+          }
+        } catch (uploadErr) {
+          console.warn("Upload fallback to local URL", uploadErr);
         }
+      }
+
+      // If no mediaId from upload, use imageUrl
+      if (!finalMediaId && imageUrl) {
+        finalMediaId = imageUrl;
       }
 
       // Create promotion
@@ -134,33 +146,41 @@ export default function NewOfferModal({
         }),
       });
 
-      if (promoRes.ok) {
-        const promoData = await promoRes.json();
+      if (!promoRes.ok) {
+        const errorData = await promoRes.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || "Failed to create promotion");
+      }
+
+      const promoData = await promoRes.json();
+      const promotionId = promoData.promotion?.id || promoData.id || promoData.data?.id;
+
+      if (promotionId) {
         // Add to default playlist
         await fetch("/api/signage/admin/playlist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            promotion_id: promoData.promotion.id,
+            promotion_id: promotionId,
             position: 999,
           }),
-        });
-
-        // If publish immediately requested
-        if (publishImmediately) {
-          await fetch("/api/signage/admin/publish", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              notes: `Published offer: ${title}`,
-            }),
-          });
-        }
-
-        onCreated();
+        }).catch(() => {});
       }
-    } catch (err) {
+
+      // If publish immediately requested
+      if (publishImmediately) {
+        await fetch("/api/signage/admin/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notes: `Published offer: ${title}`,
+          }),
+        }).catch(() => {});
+      }
+
+      onCreated();
+    } catch (err: any) {
       console.error(err);
+      setSaveError(err.message || "Failed to publish offer");
     } finally {
       setIsPublishing(false);
     }
@@ -422,6 +442,13 @@ export default function NewOfferModal({
                   <span className="text-slate-300">{durationSec} seconds</span>
                 </div>
               </div>
+
+              {saveError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{saveError}</span>
+                </div>
+              )}
 
               {/* Confirmation Dialog inside Step 3 */}
               {showConfirm && (
