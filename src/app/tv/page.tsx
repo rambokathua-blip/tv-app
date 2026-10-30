@@ -93,25 +93,46 @@ export default function TvPlayerPage() {
   const [slideProgress, setSlideProgress] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [windowScale, setWindowScale] = useState(() => {
-    if (typeof window !== "undefined") {
-      return Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-    }
-    return 1;
-  });
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [windowScale, setWindowScale] = useState(1);
 
-  // Dynamic uniform scaling to fit 1920x1080 canvas into any screen or window without cropping
+  // Dynamic uniform scaling with TV-Safe Area (98%) to fit 1920x1080 canvas without ANY clipping
   useEffect(() => {
-    const updateScale = () => {
-      const scaleX = window.innerWidth / 1920;
-      const scaleY = window.innerHeight / 1080;
-      setWindowScale(Math.min(scaleX, scaleY));
+    const applyScale = () => {
+      const vw = window.innerWidth || document.documentElement.clientWidth || 1920;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 1080;
+      // 98% safe-margin to account for TV overscan and window borders
+      const scaleX = (vw * 0.98) / 1920;
+      const scaleY = (vh * 0.98) / 1080;
+      const finalScale = Math.min(scaleX, scaleY);
+      setWindowScale(finalScale);
+
+      if (canvasRef.current) {
+        canvasRef.current.style.transform = `scale(${finalScale})`;
+        canvasRef.current.style.transformOrigin = "center center";
+      }
     };
 
-    updateScale();
-    window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
+    applyScale();
+    window.addEventListener("resize", applyScale);
+    window.addEventListener("orientationchange", applyScale);
+    const observer = new ResizeObserver(applyScale);
+    observer.observe(document.body);
+
+    return () => {
+      window.removeEventListener("resize", applyScale);
+      window.removeEventListener("orientationchange", applyScale);
+      observer.disconnect();
+    };
   }, []);
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
 
   // Live Broadcast Announcement State
   const [activeBroadcast, setActiveBroadcast] = useState<{
@@ -748,7 +769,13 @@ export default function TvPlayerPage() {
 
   return (
     <div
+      onDoubleClick={toggleFullScreen}
       style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         width: "100vw",
         height: "100vh",
         display: "flex",
@@ -756,9 +783,11 @@ export default function TvPlayerPage() {
         justifyContent: "center",
         backgroundColor: "#000000",
         overflow: "hidden",
+        zIndex: 9999,
       }}
     >
       <div
+        ref={canvasRef}
         style={{
           width: "1920px",
           height: "1080px",
@@ -768,6 +797,7 @@ export default function TvPlayerPage() {
           transformOrigin: "center center",
           transform: `scale(${windowScale})`,
           flexShrink: 0,
+          boxShadow: "0 0 60px rgba(0, 0, 0, 0.95)",
         }}
       >
       {/* ============================================================ */}
@@ -806,7 +836,8 @@ export default function TvPlayerPage() {
               style={{
                 width: "100%",
                 height: "100%",
-                objectFit: "cover",
+                objectFit: currentSlide.image_url?.includes("logo") ? "contain" : "cover",
+                padding: currentSlide.image_url?.includes("logo") ? "36px 48px" : "0",
               }}
             />
           ) : (
@@ -874,7 +905,8 @@ export default function TvPlayerPage() {
                 style={{
                   width: "100%",
                   height: "100%",
-                  objectFit: "cover",
+                  objectFit: nextSlide.image_url?.includes("logo") ? "contain" : "cover",
+                  padding: nextSlide.image_url?.includes("logo") ? "36px 48px" : "0",
                 }}
               />
             )}
