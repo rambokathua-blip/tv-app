@@ -53,6 +53,10 @@ function extractPairCode(raw: string): string | null {
         if (clean.length === 6) return clean;
       }
     }
+    const dashMatch = raw.match(/([A-Z0-9]{3})-?([A-Z0-9]{3})/i);
+    if (dashMatch) {
+      return (dashMatch[1] + dashMatch[2]).toUpperCase();
+    }
     const clean = raw.replace(/[^A-Z0-9]/gi, "").toUpperCase();
     if (clean.length === 6) return clean;
   } catch {
@@ -134,12 +138,17 @@ export default function TvDevicesPage() {
           stopCamera();
         }, 2200);
       } else {
-        const data = await res.json();
-        setPairError(data.error || "Invalid or expired pairing code");
+        const data = await res.json().catch(() => ({}));
+        const errorMessage =
+          typeof data?.error === "string"
+            ? data.error
+            : data?.error?.message || "Invalid or expired pairing code";
+        setPairError(errorMessage);
         setScannedCodeSuccess(null);
       }
-    } catch {
-      setPairError("Network connection error. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
+      setPairError(msg);
       setScannedCodeSuccess(null);
     } finally {
       setIsPairing(false);
@@ -233,18 +242,39 @@ export default function TvDevicesPage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setIsPairing(true);
+    setPairError(null);
     const reader = new FileReader();
     reader.onload = () => {
       const img = new window.Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        let width = img.width;
+        let height = img.height;
+        // Limit dimensions to 1000px so mobile phone memory doesn't get exhausted
+        const maxDim = 1000;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          setIsPairing(false);
+          setPairError("Failed to process image canvas");
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
         if (code && code.data) {
           const extracted = extractPairCode(code.data);
           if (extracted) {
@@ -252,15 +282,26 @@ export default function TvDevicesPage() {
             stopCamera();
             claimDeviceCode(extracted);
           } else {
-            setPairError(`QR code found (${code.data.slice(0, 20)}...), but no valid 6-char code found.`);
+            setIsPairing(false);
+            setPairError(`QR code found (${code.data.slice(0, 24)}...), but no valid 6-char code found.`);
           }
         } else {
-          setPairError("No QR code detected in the photo. Please try a clearer picture or enter code.");
+          setIsPairing(false);
+          setPairError("No QR code detected in this photo. Please try a closer, clearer picture or enter code.");
         }
+      };
+      img.onerror = () => {
+        setIsPairing(false);
+        setPairError("Could not load image file.");
       };
       img.src = reader.result as string;
     };
+    reader.onerror = () => {
+      setIsPairing(false);
+      setPairError("Could not read file from device.");
+    };
     reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   return (
@@ -428,12 +469,20 @@ export default function TvDevicesPage() {
                       >
                         Try Again
                       </button>
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-1.5 bg-slate-800 text-white font-medium text-xs rounded-lg"
+                      <label
+                        htmlFor="qr-file-upload-error-input"
+                        className="cursor-pointer px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs rounded-lg inline-flex items-center gap-1.5"
                       >
-                        Upload Photo
-                      </button>
+                        <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Upload Photo</span>
+                        <input
+                          id="qr-file-upload-error-input"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          className="sr-only"
+                        />
+                      </label>
                     </div>
                   </div>
                 ) : (
@@ -478,22 +527,21 @@ export default function TvDevicesPage() {
                 )}
 
                 {/* Upload Photo Option */}
-                <div className="text-center pt-1">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs text-slate-400 hover:text-emerald-400 font-semibold inline-flex items-center gap-1.5 transition-colors"
+                <div className="text-center pt-2">
+                  <label
+                    htmlFor="qr-file-upload-input"
+                    className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700/80 text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-all shadow-sm"
                   >
-                    <ImageIcon className="w-3.5 h-3.5" />
+                    <ImageIcon className="w-4 h-4 text-emerald-400" />
                     <span>Upload QR Screenshot / Photo</span>
-                  </button>
+                    <input
+                      id="qr-file-upload-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="sr-only"
+                    />
+                  </label>
                 </div>
               </div>
             )}

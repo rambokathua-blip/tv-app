@@ -108,6 +108,8 @@ export default function TvPlayerPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [windowScale, setWindowScale] = useState(1);
 
@@ -2026,7 +2028,49 @@ export default function TvPlayerPage() {
               </div>
             </button>
 
-            {/* Action 2: Switch to Admin Mode */}
+            {/* Action 2: Refresh Products & Sync Offers */}
+            <button
+              disabled={isSyncing}
+              onClick={async () => {
+                setIsSyncing(true);
+                try {
+                  await fetchManifest();
+                  setSyncToast("Products & Offers Synced!");
+                  setTimeout(() => setSyncToast(null), 3000);
+                } catch {
+                  window.location.reload();
+                } finally {
+                  setIsSyncing(false);
+                  setShowQuickMenu(false);
+                }
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 14px",
+                borderRadius: 16,
+                backgroundColor: "rgba(56, 189, 248, 0.14)",
+                border: "1px solid rgba(56, 189, 248, 0.35)",
+                color: "#38bdf8",
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <RefreshCw size={20} style={{ flexShrink: 0, color: "#38bdf8" }} className={isSyncing ? "animate-spin" : ""} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
+                  {isSyncing ? "Syncing..." : "Refresh Products & Offers"}
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
+                  Fetch latest new items & prices
+                </div>
+              </div>
+            </button>
+
+            {/* Action 3: Switch to Admin Mode */}
             <a
               href="/admin/signage"
               style={{
@@ -2139,7 +2183,30 @@ export default function TvPlayerPage() {
               </div>
             </button>
 
-            {/* Action 6: Unpair TV (if paired) */}
+            {/* Action 6: Hard Reload TV App */}
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 14px",
+                borderRadius: 12,
+                backgroundColor: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                color: "rgba(255,255,255,0.7)",
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              <RefreshCw size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
+              <span>Hard Reload TV App</span>
+            </button>
+
+            {/* Action 7: Unpair TV (if paired) */}
             {token && (
               <button
                 onClick={() => {
@@ -2335,6 +2402,35 @@ export default function TvPlayerPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Real-time Sync Toast Notification */}
+      {syncToast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "rgba(6, 78, 59, 0.95)",
+            border: "2px solid #22c55e",
+            borderRadius: 30,
+            padding: "12px 28px",
+            color: "#ffffff",
+            fontWeight: 800,
+            fontSize: 18,
+            boxShadow: "0 10px 35px rgba(0, 0, 0, 0.85), 0 0 25px rgba(34, 197, 94, 0.5)",
+            backdropFilter: "blur(12px)",
+            zIndex: 10005,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            animation: "fadeIn 0.2s ease-out",
+          }}
+        >
+          <span style={{ fontSize: 22 }}>✅</span>
+          <span>{syncToast}</span>
         </div>
       )}
     </div>
