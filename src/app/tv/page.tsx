@@ -253,12 +253,12 @@ export default function TvPlayerPage() {
 
         // Generate QR code for admin quick pair URL
         const adminPairUrl = `${window.location.origin}/admin/signage/more/devices?code=${data.code}`;
-        const svg = await QRCode.toString(adminPairUrl, {
-          type: "svg",
+        const dataUrl = await QRCode.toDataURL(adminPairUrl, {
           margin: 1,
+          width: 300,
           color: { dark: "#0f172a", light: "#ffffff" },
         });
-        setPairingQrSvg(svg);
+        setPairingQrSvg(dataUrl);
       }
     } catch {
       // Offline or network error
@@ -655,16 +655,34 @@ export default function TvPlayerPage() {
             <div
               style={{
                 backgroundColor: "#fff",
-                padding: 16,
+                padding: 12,
                 borderRadius: 20,
                 width: 220,
                 height: 220,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                overflow: "hidden",
               }}
-              dangerouslySetInnerHTML={{ __html: pairingQrSvg }}
-            />
+            >
+              {pairingQrSvg ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={pairingQrSvg}
+                  alt="Pairing QR Code"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600 }}>
+                  Generating QR...
+                </div>
+              )}
+            </div>
 
             <div style={{ textAlign: "left" }}>
               <div style={{ fontSize: 20, color: "rgba(255,255,255,0.7)", marginBottom: 8 }}>
