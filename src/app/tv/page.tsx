@@ -73,7 +73,7 @@ const FALLBACK_MANIFEST: SignageManifest = {
     },
   ],
   audio: {
-    enabled: true,
+    enabled: false,
     url: "/store-audio.mp3",
     volume: 0.8,
     loop: true,
@@ -165,9 +165,52 @@ export default function TvPlayerPage() {
 
   // Background Audio State & Controls
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isMutedParam = params.get("muted") === "true";
+      const isInIframe = window.self !== window.top;
+      return isMutedParam || isInIframe;
+    }
+    return false;
+  });
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+
+  // Listen for audio control messages from parent window (e.g. Admin Dashboard)
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (
+        e.data?.type === "MUTE_AUDIO" ||
+        (e.data?.type === "TV_AUDIO_TOGGLE" && !e.data?.enabled)
+      ) {
+        setIsAudioMuted(true);
+        if (audioRef.current) {
+          audioRef.current.muted = true;
+          audioRef.current.pause();
+        }
+        if (announcementAudioRef.current) {
+          announcementAudioRef.current.pause();
+        }
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+      } else if (
+        e.data?.type === "UNMUTE_AUDIO" ||
+        (e.data?.type === "TV_AUDIO_TOGGLE" && e.data?.enabled)
+      ) {
+        const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+        if (!isInIframe) {
+          setIsAudioMuted(false);
+          if (audioRef.current) {
+            audioRef.current.muted = false;
+          }
+        }
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   // Sync background audio with manifest and user preference
   useEffect(() => {
@@ -175,7 +218,7 @@ export default function TvPlayerPage() {
     if (!audio) return;
 
     const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
-    const isRemotelyEnabled = audioConfig?.enabled ?? true;
+    const isRemotelyEnabled = audioConfig?.enabled ?? false;
     const shouldPlay = isRemotelyEnabled && !isAudioMuted;
 
     if (audioConfig?.volume !== undefined) {
@@ -186,6 +229,7 @@ export default function TvPlayerPage() {
     if (activeBroadcast) return;
 
     if (shouldPlay) {
+      audio.muted = false;
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise
@@ -201,14 +245,18 @@ export default function TvPlayerPage() {
       }
     } else {
       audio.pause();
+      audio.muted = true;
       setIsAudioPlaying(false);
     }
   }, [manifest.audio, isAudioMuted, activeBroadcast]);
 
-  // Click / Key gesture to unblock autoplay
+  // Click / Key gesture to unblock autoplay (strictly only if remotely enabled AND not muted)
   useEffect(() => {
     const handleGesture = () => {
-      if (autoplayBlocked && audioRef.current && !isAudioMuted) {
+      const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
+      const isRemotelyEnabled = audioConfig?.enabled ?? false;
+      if (autoplayBlocked && audioRef.current && !isAudioMuted && isRemotelyEnabled) {
+        audioRef.current.muted = false;
         audioRef.current
           .play()
           .then(() => {
@@ -224,13 +272,17 @@ export default function TvPlayerPage() {
       window.removeEventListener("click", handleGesture);
       window.removeEventListener("keydown", handleGesture);
     };
-  }, [autoplayBlocked, isAudioMuted]);
+  }, [autoplayBlocked, isAudioMuted, manifest.audio]);
 
   const toggleTvAudio = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
+    const isRemotelyEnabled = audioConfig?.enabled ?? false;
+
     if (isAudioMuted || audio.paused) {
+      if (!isRemotelyEnabled) return;
       audio.muted = false;
       audio
         .play()
@@ -242,6 +294,7 @@ export default function TvPlayerPage() {
         .catch(() => {});
     } else {
       audio.pause();
+      audio.muted = true;
       setIsAudioMuted(true);
       setIsAudioPlaying(false);
     }
@@ -368,7 +421,10 @@ export default function TvPlayerPage() {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch("/api/signage/device/manifest", { headers });
+      const manifestUrl = isPreview
+        ? "/api/signage/device/manifest?preview=true"
+        : "/api/signage/device/manifest";
+      const res = await fetch(manifestUrl, { headers });
       if (res.ok) {
         const data = await res.json();
         setManifest(data);
@@ -378,7 +434,7 @@ export default function TvPlayerPage() {
     } catch {
       setIsOffline(true);
     }
-  }, [token]);
+  }, [token, isPreview]);
 
   useEffect(() => {
     if (token || isPreview) {
@@ -395,7 +451,10 @@ export default function TvPlayerPage() {
       try {
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch("/api/signage/device/version", { headers });
+        const versionUrl = isPreview
+          ? "/api/signage/device/version?preview=true"
+          : "/api/signage/device/version";
+        const res = await fetch(versionUrl, { headers });
         if (res.ok) {
           const data = await res.json();
           if (data.version && data.version > manifest.version) {
@@ -447,6 +506,12 @@ export default function TvPlayerPage() {
   useEffect(() => {
     const ann = manifest.active_announcement;
     if (!ann || !ann.id || ann.id === lastBroadcastIdRef.current) return;
+
+    // Do not play voice announcement if muted, in an iframe preview, or voice is disabled
+    const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+    const isVoiceDisabled = manifest.voice?.settings?.master_enabled === false;
+    const isAudioDisabled = manifest.audio?.enabled === false;
+    if (isAudioMuted || isInIframe || isVoiceDisabled || isAudioDisabled) return;
 
     lastBroadcastIdRef.current = ann.id;
     setActiveBroadcast(ann);
@@ -1925,7 +1990,8 @@ export default function TvPlayerPage() {
         ref={audioRef}
         src={manifest.audio?.url || "/store-audio.mp3"}
         loop={manifest.audio?.loop ?? true}
-        preload="auto"
+        preload="none"
+        muted={isAudioMuted}
         onPlay={() => {
           setIsAudioPlaying(true);
           setAutoplayBlocked(false);
@@ -1936,7 +2002,8 @@ export default function TvPlayerPage() {
       {/* Dedicated Announcement Player for Zero-Collision & Natural Voice */}
       <audio
         ref={announcementAudioRef}
-        preload="auto"
+        preload="none"
+        muted={isAudioMuted}
         style={{ display: "none" }}
       />
       </div>

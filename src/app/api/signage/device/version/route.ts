@@ -35,6 +35,7 @@ export async function GET(request: Request) {
     // fallback
   }
 
+  devStore.load();
   return successResponse({
     version: devStore.version,
     published_at: new Date().toISOString(),

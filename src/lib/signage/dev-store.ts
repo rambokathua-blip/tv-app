@@ -191,7 +191,7 @@ class DevStore {
   mediaMap: Record<string, string> = {};
 
   audioSettings = {
-    enabled: true,
+    enabled: false,
     url: "/store-audio.mp3",
     volume: 80, // 0 - 100
     loop: true,
@@ -643,7 +643,16 @@ instance.playlist = instance.playlist.filter(
 instance.promotions.forEach((promo) => {
   // If promo has an uploaded media_id (like /uploads/xxx), ensure media reflects it
   if (promo.media_id && (promo.media_id.startsWith("/") || promo.media_id.startsWith("http") || promo.media_id.startsWith("data:"))) {
-    if (!promo.media || (promo.media.storage_path && promo.media.storage_path.includes("photo-1610832958506-aa56368176cf"))) {
+    // Always keep media object in sync with media_id — even if media already exists
+    // This ensures uploaded images persist correctly after server restarts
+    const currentThumb = promo.media?.thumb_path || "";
+    const needsSync =
+      !promo.media ||
+      promo.media.storage_path === "demo" ||
+      (promo.media.storage_path && promo.media.storage_path.includes("photo-1610832958506-aa56368176cf")) ||
+      (currentThumb !== promo.media_id && !currentThumb.startsWith("/uploads/") && !currentThumb.startsWith("http") && !currentThumb.startsWith("data:"));
+
+    if (needsSync) {
       promo.media = {
         id: promo.media_id,
         kind: "image",

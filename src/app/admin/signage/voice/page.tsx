@@ -164,6 +164,17 @@ export default function VoiceAnnouncementsPage() {
 
   useEffect(() => {
     loadData();
+    return () => {
+      if (phoneAudioRef.current) {
+        phoneAudioRef.current.pause();
+      }
+      if (speechAudioRef.current) {
+        speechAudioRef.current.pause();
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, []);
 
   // Broadcast ANY custom message to TV Screen
@@ -328,6 +339,25 @@ export default function VoiceAnnouncementsPage() {
   // Toggle Background Audio
   const handleToggleBgAudio = async (enabled: boolean) => {
     setAudioBgEnabled(enabled);
+    if (!enabled) {
+      if (phoneAudioRef.current) {
+        phoneAudioRef.current.pause();
+        phoneAudioRef.current.currentTime = 0;
+        setIsPreviewPlaying(false);
+      }
+      if (speechAudioRef.current) {
+        speechAudioRef.current.pause();
+        speechAudioRef.current = null;
+        setIsPhoneSpeaking(false);
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+    try {
+      localStorage.setItem("kathua_audio_enabled", JSON.stringify(enabled));
+    } catch {}
+
     setFeedbackMsg({
       type: "info",
       text: enabled ? "TV background store audio ON ho gaya" : "TV background store audio MUTE ho gaya",

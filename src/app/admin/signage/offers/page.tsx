@@ -19,77 +19,28 @@ import EditOfferModal from "@/components/signage/EditOfferModal";
 
 export default function OffersManagePage() {
   const [filter, setFilter] = useState<string>("all");
-  const [promotions, setPromotions] = useState<Promotion[]>([
-    {
-      id: "demo-onion",
-      title: "Fresh Nashik Onion",
-      price_text: "₹38 / kg",
-      duration_sec: 10,
-      status: "live",
-      enabled: true,
-      created_at: "2026-10-30T00:00:00.000Z",
-      updated_at: "2026-10-30T00:00:00.000Z",
-      media: {
-        id: "m-1",
-        kind: "image",
-        storage_path: "demo",
-        mime: "image/jpeg",
-        bytes: 400000,
-        sha256: "abc",
-        created_at: "2026-10-30T00:00:00.000Z",
-        thumb_path:
-          "https://images.unsplash.com/photo-1508747703725-719777637510?q=80&w=400&auto=format&fit=crop",
-      },
-    },
-    {
-      id: "demo-apple",
-      title: "Kashmiri Royal Apples",
-      price_text: "₹120 / kg",
-      duration_sec: 10,
-      status: "live",
-      enabled: true,
-      created_at: "2026-10-30T00:00:00.000Z",
-      updated_at: "2026-10-30T00:00:00.000Z",
-      media: {
-        id: "m-2",
-        kind: "image",
-        storage_path: "demo",
-        mime: "image/jpeg",
-        bytes: 500000,
-        sha256: "def",
-        created_at: "2026-10-30T00:00:00.000Z",
-        thumb_path:
-          "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?q=80&w=400&auto=format&fit=crop",
-      },
-    },
-    {
-      id: "demo-tomato",
-      title: "Desi Hybrid Tomato",
-      price_text: "₹25 / kg",
-      duration_sec: 10,
-      status: "draft",
-      enabled: true,
-      created_at: "2026-10-30T00:00:00.000Z",
-      updated_at: "2026-10-30T00:00:00.000Z",
-      media: {
-        id: "m-3",
-        kind: "image",
-        storage_path: "demo",
-        mime: "image/jpeg",
-        bytes: 450000,
-        sha256: "ghi",
-        created_at: "2026-10-30T00:00:00.000Z",
-        thumb_path:
-          "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=400&auto=format&fit=crop",
-      },
-    },
-  ]);
+  const [promotions, setPromotions] = useState<Promotion[]>(() => {
+    // Restore from localStorage first so uploaded images survive refresh
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("kathua_signage_promotions");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Promotion | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Promotion | null>(null);
 
-  // Fetch promotions from API
+  // Fetch promotions from API — always update localStorage with server truth
   const loadPromotions = async () => {
     try {
       const res = await fetch("/api/signage/admin/promotions");
@@ -104,19 +55,12 @@ export default function OffersManagePage() {
       }
     } catch {
       // keep fallback
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem("kathua_signage_promotions");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPromotions(parsed);
-        }
-      }
-    } catch {}
     loadPromotions();
   }, []);
 

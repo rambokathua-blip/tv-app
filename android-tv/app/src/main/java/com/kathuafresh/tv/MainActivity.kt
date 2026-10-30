@@ -2,14 +2,17 @@ package com.kathuafresh.tv
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.content.Intent
-import android.net.Uri
+import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.view.WindowManager
@@ -17,6 +20,11 @@ import android.webkit.*
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import java.util.Locale
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -28,6 +36,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private val FILE_CHOOSER_REQUEST_CODE = 2001
+    private val PERMISSION_REQUEST_CODE = 3001
 
     // Primary Live TV Screen URL
     private val TV_URL = "https://tv-app-5wzh.vercel.app/tv?preview=true"
@@ -49,17 +58,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         webView = findViewById(R.id.webView)
         loadingSpinner = findViewById(R.id.loadingSpinner)
 
-        // 3. Initialize Android TextToSpeech engine
+        // 3. Request permissions for Camera and Storage
+        checkAppPermissions()
+
+        // 4. Initialize Android TextToSpeech engine
         tts = TextToSpeech(this, this)
 
-        // 4. Configure Fullscreen Hardware-Accelerated WebView
+        // 5. Configure Fullscreen Hardware-Accelerated WebView
         setupWebView()
 
-        // 5. Setup Network Liveness Monitor
+        // 6. Setup Network Liveness Monitor
         setupNetworkCallback()
 
-        // 6. Load Live Kathua Fresh Signage Display
+        // 7. Load Live Kathua Fresh Signage Display
         webView.loadUrl(TV_URL)
+    }
+
+    private fun checkAppPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(android.Manifest.permission.CAMERA)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+        }
     }
 
     private fun hideSystemUI() {
@@ -136,44 +167,106 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 filePathCallback: ValueCallback<Array<Uri>>?,
                 fileChooserParams: FileChooserParams?
             ): Boolean {
-                // Cancel existing callback if any to prevent webview hanging
                 fileUploadCallback?.onReceiveValue(null)
                 fileUploadCallback = filePathCallback
 
                 try {
-                    val pickIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "image/*"
-                    }
-                    val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
-                        putExtra(Intent.EXTRA_INTENT, pickIntent)
-                        putExtra(Intent.EXTRA_TITLE, "Select Offer Photo")
-                    }
+                    val chooserIntent = buildImageChooserIntent(fileChooserParams)
                     startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
                     return true
                 } catch (e: Exception) {
-                    fileUploadCallback?.onReceiveValue(null)
-                    fileUploadCallback = null
-                    return false
+                    try {
+                        // Fallback: direct gallery picker
+                        val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                            type = "image/*"
+                        }
+                        startActivityForResult(galleryIntent, FILE_CHOOSER_REQUEST_CODE)
+                        return true
+                    } catch (e2: Exception) {
+                        fileUploadCallback?.onReceiveValue(null)
+                        fileUploadCallback = null
+                        return false
+                    }
                 }
             }
         }
+    }
+
+    private fun buildImageChooserIntent(fileChooserParams: WebChromeClient.FileChooserParams?): Intent {
+        val extraIntents = mutableListOf<Intent>()
+
+        // 1. Camera option
+        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        if (cameraIntent.resolveActivity(packageManager) != null) {
+            extraIntents.add(cameraIntent)
+        }
+
+        // 2. Base content picker intent
+        var baseIntent = fileChooserParams?.createIntent()
+        if (baseIntent == null) {
+            baseIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+            }
+        }
+
+        // 3. Fallback gallery intent if supported
+        val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+            type = "image/*"
+        }
+        if (galleryIntent.resolveActivity(packageManager) != null) {
+            extraIntents.add(galleryIntent)
+        }
+
+        val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
+            putExtra(Intent.EXTRA_INTENT, baseIntent)
+            putExtra(Intent.EXTRA_TITLE, "Select Offer Image")
+            if (extraIntents.isNotEmpty()) {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toTypedArray())
+            }
+        }
+        return chooserIntent
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
             if (fileUploadCallback == null) return
-            val results: Array<Uri>? = if (resultCode == RESULT_OK && data != null) {
-                data.data?.let { arrayOf(it) }
-                    ?: data.clipData?.let { clip ->
-                        Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+
+            var results: Array<Uri>? = null
+            if (resultCode == RESULT_OK) {
+                if (data != null) {
+                    if (data.data != null) {
+                        results = arrayOf(data.data!!)
+                    } else if (data.clipData != null) {
+                        val count = data.clipData!!.itemCount
+                        results = Array(count) { i -> data.clipData!!.getItemAt(i).uri }
+                    } else if (data.extras?.get("data") is Bitmap) {
+                        val bitmap = data.extras?.get("data") as Bitmap
+                        saveBitmapToCache(bitmap)?.let {
+                            results = arrayOf(it)
+                        }
                     }
-            } else {
-                null
+                }
             }
+
             fileUploadCallback?.onReceiveValue(results)
             fileUploadCallback = null
+        }
+    }
+
+    private fun saveBitmapToCache(bitmap: Bitmap): Uri? {
+        return try {
+            val cachePath = File(cacheDir, "images")
+            cachePath.mkdirs()
+            val file = File(cachePath, "upload_${System.currentTimeMillis()}.jpg")
+            val stream = FileOutputStream(file)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+            stream.flush()
+            stream.close()
+            Uri.fromFile(file)
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -229,6 +322,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         @JavascriptInterface
         fun getAppVersion(): String {
             return "1.0.0-kathua-fresh"
+        }
+
+        @JavascriptInterface
+        fun openImagePicker() {
+            runOnUiThread {
+                try {
+                    val chooser = buildImageChooserIntent(null)
+                    startActivityForResult(chooser, FILE_CHOOSER_REQUEST_CODE)
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Opening Gallery...", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun openCamera() {
+            runOnUiThread {
+                try {
+                    val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                    startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST_CODE)
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Opening Camera...", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 

@@ -187,6 +187,22 @@ export default function EditOfferModal({
 
   if (!isOpen) return null;
 
+  const triggerChooseFile = () => {
+    if (typeof window !== "undefined" && (window as any).AndroidSignage?.openImagePicker) {
+      (window as any).AndroidSignage.openImagePicker();
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const triggerCamera = () => {
+    if (typeof window !== "undefined" && (window as any).AndroidSignage?.openCamera) {
+      (window as any).AndroidSignage.openCamera();
+    } else {
+      cameraInputRef.current?.click();
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -331,20 +347,44 @@ export default function EditOfferModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh] shadow-2xl">
-        {/* Hidden inputs triggered explicitly by ref */}
+        {/* Active inputs (hidden visually but kept in layout tree for Android WebView compatibility) */}
         <input
+          id="edit-offer-file-input"
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          className="hidden"
+          className="sr-only"
+          style={{
+            position: "absolute",
+            width: "1px",
+            height: "1px",
+            padding: 0,
+            margin: "-1px",
+            overflow: "hidden",
+            clip: "rect(0,0,0,0)",
+            border: 0,
+            opacity: 0.001,
+          }}
           onChange={handleFileChange}
         />
         <input
+          id="edit-offer-camera-input"
           ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
-          className="hidden"
+          className="sr-only"
+          style={{
+            position: "absolute",
+            width: "1px",
+            height: "1px",
+            padding: 0,
+            margin: "-1px",
+            overflow: "hidden",
+            clip: "rect(0,0,0,0)",
+            border: 0,
+            opacity: 0.001,
+          }}
           onChange={handleFileChange}
         />
 
@@ -402,14 +442,14 @@ export default function EditOfferModal({
               )}
 
               {/* Top overlay Quick Trigger */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm border border-white/20 active:scale-95 transition-all shadow-md"
+              <label
+                htmlFor="edit-offer-file-input"
+                onClick={triggerChooseFile}
+                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm border border-white/20 active:scale-95 transition-all shadow-md cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Change Image</span>
-              </button>
+              </label>
             </div>
 
             {/* Photo Selection Tabs */}
@@ -456,22 +496,22 @@ export default function EditOfferModal({
               {/* Tab 1: Upload & Camera Buttons */}
               {imageTab === "upload" && (
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center"
+                  <label
+                    htmlFor="edit-offer-file-input"
+                    onClick={triggerChooseFile}
+                    className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                   >
                     <Upload className="w-4 h-4 shrink-0" />
                     <span>Choose from Files / Gallery</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
+                  </label>
+                  <label
+                    htmlFor="edit-offer-camera-input"
+                    onClick={triggerCamera}
+                    className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                   >
                     <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>Take New Photo (Camera)</span>
-                  </button>
+                  </label>
                 </div>
               )}
 

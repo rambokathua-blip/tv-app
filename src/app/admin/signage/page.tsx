@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Tv,
@@ -22,8 +22,17 @@ import NewOfferModal from "@/components/signage/NewOfferModal";
 export default function SignageDashboardPage() {
   const [isTvOnline, setIsTvOnline] = useState(true);
   const [isTvPaused, setIsTvPaused] = useState(false);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isAudioEnabled, setIsAudioEnabled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("kathua_audio_enabled");
+        if (cached !== null) return JSON.parse(cached);
+      } catch {}
+    }
+    return false;
+  });
   const [currentVersion, setCurrentVersion] = useState(1);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [stats, setStats] = useState({
     liveOffers: 3,
     draftOffers: 1,
@@ -73,7 +82,12 @@ export default function SignageDashboardPage() {
     fetch("/api/signage/admin/audio")
       .then((res) => res.json())
       .then((data) => {
-        if (typeof data.enabled === "boolean") setIsAudioEnabled(data.enabled);
+        if (typeof data.enabled === "boolean") {
+          setIsAudioEnabled(data.enabled);
+          try {
+            localStorage.setItem("kathua_audio_enabled", JSON.stringify(data.enabled));
+          } catch {}
+        }
       })
       .catch(() => {});
   }, []);
@@ -98,6 +112,18 @@ export default function SignageDashboardPage() {
   const handleToggleAudio = async () => {
     const nextState = !isAudioEnabled;
     setIsAudioEnabled(nextState);
+    try {
+      localStorage.setItem("kathua_audio_enabled", JSON.stringify(nextState));
+    } catch {}
+
+    // Immediately notify embedded iframe to silence audio
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        { type: "TV_AUDIO_TOGGLE", enabled: nextState },
+        "*"
+      );
+    }
+
     setActionMessage(nextState ? "Store Audio: ON (TV Syncing)" : "Store Audio: MUTED (TV Syncing)");
     setTimeout(() => setActionMessage(null), 3000);
     try {
@@ -267,10 +293,11 @@ export default function SignageDashboardPage() {
           </Link>
         </div>
 
-        {/* Embedded 16:9 Preview Frame */}
+        {/* Embedded 16:9 Preview Frame (strictly muted in admin preview) */}
         <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-800 bg-black shadow-inner">
           <iframe
-            src="/tv?preview=true"
+            ref={iframeRef}
+            src="/tv?preview=true&muted=true"
             title="TV Preview"
             className="w-full h-full border-0 pointer-events-none"
           />

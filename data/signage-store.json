@@ -143,7 +143,7 @@
     "/uploads/ba36d634-5112-44d1-8b2f-40907b6e127f.jpg": "/uploads/ba36d634-5112-44d1-8b2f-40907b6e127f.jpg"
   },
   "audioSettings": {
-    "enabled": true,
+    "enabled": false,
     "url": "/store-audio.mp3",
     "volume": 80,
     "loop": true
