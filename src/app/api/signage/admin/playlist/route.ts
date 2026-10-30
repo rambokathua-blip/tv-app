@@ -36,7 +36,8 @@ export async function GET() {
     // fallback to devStore
   }
 
-  // devStore fallback
+  // devStore fallback: reload from disk
+  devStore.load();
   const items = devStore.playlist.map((item) => ({
     ...item,
     promotion:

@@ -57,87 +57,91 @@ export async function POST(request: Request) {
   const width: number | null = null;
   const height: number | null = null;
 
-  try {
-    const admin = createAdminClient();
-    // Upload to Supabase Storage with 3s timeout
-    const uploadPromise = admin.storage
-      .from("signage-media")
-      .upload(storagePath, arrayBuffer, {
-        contentType: mime,
-        upsert: false,
-      });
+  const hasRealSupabaseKey =
+    Boolean(process.env.SUPABASE_SECRET_KEY) &&
+    !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
 
-    const timeoutPromise = new Promise<{ error: Error }>((resolve) =>
-      setTimeout(() => resolve({ error: new Error("Storage timeout") }), 3000)
-    );
+  if (hasRealSupabaseKey) {
+    try {
+      const admin = createAdminClient();
+      // Upload to Supabase Storage with 3s timeout
+      const uploadPromise = admin.storage
+        .from("signage-media")
+        .upload(storagePath, arrayBuffer, {
+          contentType: mime,
+          upsert: false,
+        });
 
-    const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
+      const timeoutPromise = new Promise<{ error: Error }>((resolve) =>
+        setTimeout(() => resolve({ error: new Error("Storage timeout") }), 3000)
+      );
 
-    if (!uploadError) {
-      const { data: media, error: dbError } = await admin
-        .from("signage_media")
-        .insert({
-          kind,
-          storage_path: storagePath,
-          mime,
-          bytes: file.size,
-          width,
-          height,
-          sha256,
-          created_by: auth.claims.sub,
-        })
-        .select()
-        .single();
+      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
 
-      if (!dbError && media) {
-        finalMedia = media;
+      if (!uploadError) {
+        const { data: media, error: dbError } = await admin
+          .from("signage_media")
+          .insert({
+            kind,
+            storage_path: storagePath,
+            mime,
+            bytes: file.size,
+            width,
+            height,
+            sha256,
+            created_by: auth.claims.sub,
+          })
+          .select()
+          .single();
+
+        if (!dbError && media) {
+          finalMedia = media;
+        }
       }
+    } catch {
+      // Supabase storage bucket or table unmigrated
     }
-  } catch {
-    // Supabase storage bucket or table unmigrated
   }
 
   if (!finalMedia) {
-    // In local dev try writing to public/uploads
-    if (process.env.NODE_ENV === "development") {
-      try {
-        const fs = await import("fs/promises");
-        const path = await import("path");
-        const uploadsDir = path.join(process.cwd(), "public", "uploads");
-        await fs.mkdir(uploadsDir, { recursive: true });
+    // Try writing to public/uploads
+    try {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const uploadsDir = path.join(process.cwd(), "public", "uploads");
+      await fs.mkdir(uploadsDir, { recursive: true });
 
-        const filename = `${crypto.randomUUID()}.${ext}`;
-        const filePath = path.join(uploadsDir, filename);
-        await fs.writeFile(filePath, Buffer.from(arrayBuffer));
+      const filename = `${crypto.randomUUID()}.${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+      await fs.writeFile(filePath, Buffer.from(arrayBuffer));
 
-        const publicUrl = `/uploads/${filename}`;
-        const mediaId = "media-" + crypto.randomUUID();
+      const publicUrl = `/uploads/${filename}`;
+      const mediaId = "media-" + crypto.randomUUID();
 
-        finalMedia = {
-          id: mediaId,
-          kind,
-          storage_path: publicUrl,
-          mime,
-          bytes: file.size,
-          width,
-          height,
-          sha256,
-          created_at: new Date().toISOString(),
-          thumb_path: publicUrl,
-        };
+      finalMedia = {
+        id: mediaId,
+        kind,
+        storage_path: publicUrl,
+        mime,
+        bytes: file.size,
+        width,
+        height,
+        sha256,
+        created_at: new Date().toISOString(),
+        thumb_path: publicUrl,
+      };
 
-        if (!devStore.mediaMap) devStore.mediaMap = {};
-        devStore.mediaMap[mediaId] = publicUrl;
+      devStore.setMedia(mediaId, publicUrl);
+      devStore.setMedia(publicUrl, publicUrl);
 
-        return successResponse({
-          media: finalMedia,
-          ...finalMedia,
-          public_url: publicUrl,
-          storage_path: publicUrl,
-        }, 201);
-      } catch (fsErr) {
-        console.warn("FS write fallback to dataUri:", fsErr);
-      }
+      return successResponse({
+        media: finalMedia,
+        ...finalMedia,
+        public_url: publicUrl,
+        storage_path: publicUrl,
+      }, 201);
+    } catch (fsErr) {
+      console.warn("FS write fallback to dataUri:", fsErr);
     }
 
     // Always fallback to data URI
@@ -156,8 +160,9 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
       thumb_path: dataUri,
     };
-    if (!devStore.mediaMap) devStore.mediaMap = {};
-    devStore.mediaMap[mediaId] = dataUri;
+    devStore.setMedia(mediaId, dataUri);
+    devStore.setMedia(dataUri, dataUri);
+
     return successResponse({
       media: finalMedia,
       ...finalMedia,
@@ -168,6 +173,9 @@ export async function POST(request: Request) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const publicUrl = `${supabaseUrl}/storage/v1/object/public/signage-media/${storagePath}`;
+
+  devStore.setMedia(finalMedia.id, publicUrl);
+  devStore.setMedia(publicUrl, publicUrl);
 
   return successResponse({
     media: finalMedia,

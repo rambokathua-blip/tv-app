@@ -18,27 +18,34 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
-  try {
-    const admin = createAdminClient();
-    let query = admin
-      .from("signage_promotions")
-      .select("*, media:signage_media(*)")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+  const hasRealSupabaseKey =
+    Boolean(process.env.SUPABASE_SECRET_KEY) &&
+    !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
 
-    if (status) {
-      query = query.eq("status", status);
-    }
+  if (hasRealSupabaseKey) {
+    try {
+      const admin = createAdminClient();
+      let query = admin
+        .from("signage_promotions")
+        .select("*, media:signage_media(*)")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
 
-    const { data, error } = await query;
-    if (!error && data) {
-      return successResponse({ promotions: data, data });
+      if (status) {
+        query = query.eq("status", status);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        return successResponse({ promotions: data, data });
+      }
+    } catch {
+      // fallback
     }
-  } catch {
-    // fallback
   }
 
-  // DevStore fallback
+  // DevStore fallback: load fresh persistent disk state
+  devStore.load();
   const filtered = status
     ? devStore.promotions.filter((p) => p.status === status)
     : devStore.promotions;
@@ -52,8 +59,13 @@ export async function POST(request: Request) {
   const parsed = await parseBody(request, createPromotionSchema);
   if (parsed.error) return parsed.error;
 
-  try {
-    const admin = createAdminClient();
+  const hasRealSupabaseKey =
+    Boolean(process.env.SUPABASE_SECRET_KEY) &&
+    !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
+
+  if (hasRealSupabaseKey) {
+    try {
+      const admin = createAdminClient();
     const isValidUUID =
       parsed.data.media_id &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -85,8 +97,9 @@ export async function POST(request: Request) {
       }
       return successResponse({ promotion: data, ...data }, 201);
     }
-  } catch (err) {
-    console.warn("Supabase promotion create fallback:", err);
+    } catch (err) {
+      console.warn("Supabase promotion create fallback:", err);
+    }
   }
 
   // Fallback to devStore

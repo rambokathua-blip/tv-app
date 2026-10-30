@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   X,
   Upload,
   Camera,
   ImageIcon,
   AlertTriangle,
-  CheckCircle2,
   Clock,
   Sparkles,
   Save,
+  Link2,
+  Check,
 } from "lucide-react";
 import type { Promotion } from "@/lib/signage/types";
 
@@ -20,6 +21,45 @@ interface EditOfferModalProps {
   onClose: () => void;
   onUpdated: () => void;
 }
+
+const PRESET_GROCERY_PHOTOS = [
+  {
+    name: "Nashik Onion (प्याज)",
+    url: "https://images.unsplash.com/photo-1508747703725-719777637510?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Kashmiri Apple (सेब)",
+    url: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Desi Tomato (टमाटर)",
+    url: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Fresh Cauliflower (गोभी)",
+    url: "https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Fresh Potato (आलू)",
+    url: "https://images.unsplash.com/photo-1518977676601-b53f82aba655?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Green Capsicum (शिमला मिर्च)",
+    url: "https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Fresh Banana (केला)",
+    url: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Ginger & Garlic (अदरक लहसुन)",
+    url: "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    name: "Kathua Fresh Logo",
+    url: "/kathua-fresh-logo.jpg",
+  },
+];
 
 async function compressClientImage(
   file: File
@@ -51,15 +91,15 @@ async function compressClientImage(
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
-          const url = URL.createObjectURL(file);
+          const url = (e.target?.result as string) || URL.createObjectURL(file);
           resolve({ file, dataUrl: url, isWide: true });
           return;
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         const ratio = img.width / img.height;
-        const isWide = ratio >= 1.6 && ratio <= 1.95;
+        const isWide = ratio >= 1.5 && ratio <= 2.1;
 
         canvas.toBlob(
           (blob) => {
@@ -75,11 +115,11 @@ async function compressClientImage(
             }
           },
           "image/jpeg",
-          0.82
+          0.85
         );
       };
       img.onerror = () => {
-        const url = URL.createObjectURL(file);
+        const url = (e.target?.result as string) || URL.createObjectURL(file);
         resolve({ file, dataUrl: url, isWide: true });
       };
       img.src = e.target?.result as string;
@@ -98,21 +138,52 @@ export default function EditOfferModal({
   onClose,
   onUpdated,
 }: EditOfferModalProps) {
-  const initialThumb =
-    promo.media_id ||
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const getInitialThumb = () =>
+    (promo.media?.thumb_path && !promo.media.thumb_path.includes("photo-1610832958506-aa56368176cf")
+      ? promo.media.thumb_path
+      : null) ||
+    (promo.media?.storage_path && promo.media.storage_path !== "demo"
+      ? promo.media.storage_path
+      : null) ||
+    (promo.media_id && (promo.media_id.startsWith("/") || promo.media_id.startsWith("http") || promo.media_id.startsWith("data:"))
+      ? promo.media_id
+      : null) ||
     promo.media?.thumb_path ||
-    promo.media?.storage_path ||
+    promo.media_id ||
     "/kathua-fresh-logo.jpg";
 
   const [title, setTitle] = useState(promo.title);
   const [priceText, setPriceText] = useState(promo.price_text || "");
   const [durationSec, setDurationSec] = useState(promo.duration_sec || 10);
   const [status, setStatus] = useState(promo.status);
-  const [imageUrl, setImageUrl] = useState(initialThumb);
+  const [imageUrl, setImageUrl] = useState(getInitialThumb());
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [hasNewImage, setHasNewImage] = useState(false);
   const [aspectWarning, setAspectWarning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Secondary Photo Options: "upload" | "presets" | "url"
+  const [imageTab, setImageTab] = useState<"upload" | "presets" | "url">("upload");
+  const [customUrlInput, setCustomUrlInput] = useState("");
+
+  // Sync state whenever modal opens or promo changes
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(promo.title);
+      setPriceText(promo.price_text || "");
+      setDurationSec(promo.duration_sec || 10);
+      setStatus(promo.status);
+      setImageUrl(getInitialThumb());
+      setImageFile(null);
+      setHasNewImage(false);
+      setAspectWarning(false);
+      setSaveError(null);
+    }
+  }, [isOpen, promo.id]);
 
   if (!isOpen) return null;
 
@@ -124,13 +195,31 @@ export default function EditOfferModal({
       const { file: compressed, dataUrl, isWide } = await compressClientImage(file);
       setImageFile(compressed);
       setImageUrl(dataUrl);
+      setHasNewImage(true);
       setAspectWarning(!isWide);
     } catch {
       setImageFile(file);
-      setImageUrl(URL.createObjectURL(file));
+      const url = URL.createObjectURL(file);
+      setImageUrl(url);
+      setHasNewImage(true);
     } finally {
       e.target.value = "";
     }
+  };
+
+  const handleSelectPreset = (presetUrl: string) => {
+    setImageUrl(presetUrl);
+    setImageFile(null);
+    setHasNewImage(true);
+    setAspectWarning(false);
+  };
+
+  const handleApplyCustomUrl = () => {
+    if (!customUrlInput.trim()) return;
+    setImageUrl(customUrlInput.trim());
+    setImageFile(null);
+    setHasNewImage(true);
+    setAspectWarning(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -141,9 +230,9 @@ export default function EditOfferModal({
     setSaveError(null);
 
     try {
-      let finalMediaId = promo.media_id;
+      let finalMediaId: string | null = null;
 
-      // If user uploaded a new image file
+      // 1. If user uploaded a new local file, upload it to the server
       if (imageFile) {
         try {
           const formData = new FormData();
@@ -166,11 +255,25 @@ export default function EditOfferModal({
           console.warn("Upload fallback", uploadErr);
         }
 
+        // If server upload failed or returned blob, guarantee base64 dataUri so it's permanent
         if (!finalMediaId || finalMediaId.startsWith("blob:")) {
-          finalMediaId = imageUrl;
+          if (imageUrl && !imageUrl.startsWith("blob:")) {
+            finalMediaId = imageUrl;
+          } else {
+            finalMediaId = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = (ev) => resolve((ev.target?.result as string) || "/kathua-fresh-logo.jpg");
+              reader.onerror = () => resolve("/kathua-fresh-logo.jpg");
+              reader.readAsDataURL(imageFile);
+            });
+          }
         }
-      } else if (imageUrl && imageUrl !== initialThumb && !imageUrl.startsWith("blob:")) {
+      } else if (hasNewImage && imageUrl && !imageUrl.startsWith("blob:")) {
+        // User selected a preset or typed an image URL
         finalMediaId = imageUrl;
+      } else {
+        // User kept existing image
+        finalMediaId = getInitialThumb();
       }
 
       // Update the promotion
@@ -190,6 +293,20 @@ export default function EditOfferModal({
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error?.message || "Failed to update offer");
+      }
+
+      const updatedPromoData = await res.json().catch(() => null);
+      if (updatedPromoData) {
+        try {
+          const cached = localStorage.getItem("kathua_signage_promotions");
+          const list = cached ? JSON.parse(cached) : [];
+          if (Array.isArray(list)) {
+            const updated = list.map((p: any) =>
+              p.id === promo.id ? { ...p, ...updatedPromoData, media_id: finalMediaId } : p
+            );
+            localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
+          }
+        } catch {}
       }
 
       // Trigger publish so TV updates immediately
@@ -214,10 +331,32 @@ export default function EditOfferModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh] shadow-2xl">
+        {/* Hidden inputs triggered explicitly by ref */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-white">Edit Offer Details</h2>
+            {hasNewImage && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                New Photo Selected
+              </span>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -231,9 +370,17 @@ export default function EditOfferModal({
         <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Image & Preview */}
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-slate-400">
-              Offer Image & TV Preview
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-400">
+                Offer Image & TV Preview
+              </label>
+              {hasNewImage && (
+                <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Ready to Save
+                </span>
+              )}
+            </div>
+
             <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 group">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -254,42 +401,140 @@ export default function EditOfferModal({
                 </div>
               )}
 
-              {/* Top overlay trigger */}
-              <div className="relative absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm cursor-pointer border border-white/20 active:scale-95 transition-all shadow-md overflow-hidden">
+              {/* Top overlay Quick Trigger */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm border border-white/20 active:scale-95 transition-all shadow-md"
+              >
                 <Upload className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Change Image</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                  onChange={handleFileChange}
-                />
-              </div>
+              </button>
             </div>
 
-            {/* Mobile Prominent Change Picture & Camera Buttons with direct inputs */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <div className="relative py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center overflow-hidden">
-                <Upload className="w-4 h-4 shrink-0" />
-                <span>Change Picture</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                  onChange={handleFileChange}
-                />
+            {/* Photo Selection Tabs */}
+            <div className="pt-1">
+              <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800 gap-1 mb-2.5">
+                <button
+                  type="button"
+                  onClick={() => setImageTab("upload")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    imageTab === "upload"
+                      ? "bg-emerald-500 text-slate-950 shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload / Camera</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageTab("presets")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    imageTab === "presets"
+                      ? "bg-emerald-500 text-slate-950 shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Store Library</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageTab("url")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    imageTab === "url"
+                      ? "bg-emerald-500 text-slate-950 shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>Web Link</span>
+                </button>
               </div>
-              <div className="relative py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center overflow-hidden">
-                <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Take New Photo</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                  onChange={handleFileChange}
-                />
-              </div>
+
+              {/* Tab 1: Upload & Camera Buttons */}
+              {imageTab === "upload" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center"
+                  >
+                    <Upload className="w-4 h-4 shrink-0" />
+                    <span>Choose from Files / Gallery</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
+                  >
+                    <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Take New Photo (Camera)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Tab 2: 1-Tap Preset Store Photos */}
+              {imageTab === "presets" && (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] text-slate-400 font-medium">
+                    Tap any fresh item to instantly apply photo:
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 bg-slate-950/50 rounded-xl border border-slate-800">
+                    {PRESET_GROCERY_PHOTOS.map((p) => {
+                      const isSelected = imageUrl === p.url;
+                      return (
+                        <button
+                          key={p.url}
+                          type="button"
+                          onClick={() => handleSelectPreset(p.url)}
+                          className={`relative aspect-video rounded-lg overflow-hidden border transition-all text-left group ${
+                            isSelected
+                              ? "border-emerald-400 ring-2 ring-emerald-500/50"
+                              : "border-slate-800 hover:border-slate-600"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={p.url}
+                            alt={p.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-black/80 px-1 py-0.5 text-[9px] text-white font-bold truncate">
+                            {p.name}
+                          </div>
+                          {isSelected && (
+                            <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-bold">
+                              ✓
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Paste Custom Image Link */}
+              {imageTab === "url" && (
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://example.com/image.jpg"
+                    value={customUrlInput}
+                    onChange={(e) => setCustomUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyCustomUrl}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all"
+                  >
+                    Apply Link
+                  </button>
+                </div>
+              )}
             </div>
 
             {aspectWarning && (

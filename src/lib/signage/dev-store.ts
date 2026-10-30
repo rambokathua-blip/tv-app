@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import type {
   Promotion,
   PlaylistItem,
@@ -8,8 +10,89 @@ import type {
   VoiceSettings,
 } from "./types";
 
-// In-memory persistent state for local development when Supabase DB is unconfigured or in dev mode
+function getStoreFilePath(): string {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    return path.join(dataDir, "signage-store.json");
+  } catch {
+    return path.join("/tmp", "signage-store.json");
+  }
+}
+
+// In-memory persistent state backed by disk JSON for local development and dev fallback
 class DevStore {
+  constructor() {
+    this.load();
+  }
+
+  load() {
+    try {
+      const filePath = getStoreFilePath();
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const data = JSON.parse(raw);
+        if (data.promotions && Array.isArray(data.promotions) && data.promotions.length > 0) {
+          this.promotions = data.promotions;
+        }
+        if (data.playlist && Array.isArray(data.playlist) && data.playlist.length > 0) {
+          this.playlist = data.playlist;
+        }
+        if (data.branding) {
+          this.branding = data.branding;
+        }
+        if (data.qrCodes && Array.isArray(data.qrCodes) && data.qrCodes.length > 0) {
+          this.qrCodes = data.qrCodes;
+        }
+        if (data.mediaMap && typeof data.mediaMap === "object") {
+          this.mediaMap = { ...this.mediaMap, ...data.mediaMap };
+        }
+        if (data.audioSettings) {
+          this.audioSettings = data.audioSettings;
+        }
+        if (data.voiceSettings) {
+          this.voiceSettings = data.voiceSettings;
+        }
+        if (data.announcements && Array.isArray(data.announcements) && data.announcements.length > 0) {
+          this.announcements = data.announcements;
+        }
+        if (typeof data.version === "number") {
+          this.version = data.version;
+        }
+      }
+    } catch (err) {
+      console.warn("DevStore load warning:", err);
+    }
+  }
+
+  save() {
+    try {
+      const filePath = getStoreFilePath();
+      const payload = {
+        version: this.version,
+        promotions: this.promotions,
+        playlist: this.playlist,
+        branding: this.branding,
+        qrCodes: this.qrCodes,
+        mediaMap: this.mediaMap,
+        audioSettings: this.audioSettings,
+        voiceSettings: this.voiceSettings,
+        announcements: this.announcements,
+        updated_at: new Date().toISOString(),
+      };
+      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
+    } catch (err) {
+      console.warn("DevStore save warning:", err);
+    }
+  }
+
+  setMedia(id: string, url: string) {
+    if (!this.mediaMap) this.mediaMap = {};
+    this.mediaMap[id] = url;
+    this.save();
+  }
   promotions: Promotion[] = [
     {
       id: "demo-onion",
@@ -220,6 +303,7 @@ class DevStore {
   }
 
   addPromotion(promo: Omit<Promotion, "id" | "created_at" | "updated_at">): Promotion {
+    this.load();
     const id = "promo-" + Date.now();
     let media = promo.media;
     if (promo.media_id) {
@@ -239,13 +323,15 @@ class DevStore {
         created_at: new Date().toISOString(),
         thumb_path: resolvedPath,
       };
+    } else if (media && (media.storage_path || media.thumb_path)) {
+      promo.media_id = media.storage_path !== "demo" ? media.storage_path : media.thumb_path;
     }
 
     const newPromo: Promotion = {
       ...promo,
       id,
       media,
-      media_id: promo.media_id || media?.storage_path,
+      media_id: promo.media_id || media?.storage_path || media?.thumb_path,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -268,7 +354,89 @@ class DevStore {
     return newPromo;
   }
 
+  updatePromotion(id: string, updates: Partial<Promotion>): Promotion {
+    this.load();
+    const index = this.promotions.findIndex((p) => p.id === id);
+    let resolvedMedia = updates.media || null;
+    if (updates.media_id) {
+      const rawId = updates.media_id;
+      const resolvedPath =
+        this.mediaMap[rawId] ||
+        (!rawId.startsWith("blob:") &&
+        (rawId.startsWith("data:") ||
+          rawId.startsWith("http") ||
+          rawId.startsWith("/"))
+          ? rawId
+          : "/kathua-fresh-logo.jpg");
+
+      resolvedMedia = {
+        id: rawId,
+        kind: "image" as const,
+        storage_path: resolvedPath,
+        mime: "image/jpeg",
+        bytes: 200000,
+        sha256: "dev-hash",
+        created_at: new Date().toISOString(),
+        thumb_path: resolvedPath,
+      };
+    }
+
+    if (index >= 0) {
+      const current = this.promotions[index];
+      const updatedPromo: Promotion = {
+        ...current,
+        ...updates,
+        media_id: updates.media_id || current.media_id || resolvedMedia?.storage_path,
+        media: resolvedMedia || current.media,
+        updated_at: new Date().toISOString(),
+      };
+      this.promotions[index] = updatedPromo;
+
+      // Update in playlist as well
+      const plItem = this.playlist.find((pl) => pl.promotion_id === id);
+      if (plItem) {
+        plItem.promotion = updatedPromo;
+      }
+      this.publish();
+      return updatedPromo;
+    } else {
+      // Upsert if not found
+      const newPromo: Promotion = {
+        id,
+        title: updates.title || "Offer",
+        price_text: updates.price_text,
+        duration_sec: updates.duration_sec || 10,
+        status: updates.status || "live",
+        enabled: updates.enabled ?? true,
+        media: resolvedMedia,
+        media_id: updates.media_id || resolvedMedia?.storage_path,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      this.promotions.unshift(newPromo);
+      this.playlist.unshift({
+        id: "pl-" + Date.now(),
+        playlist_id: "default",
+        promotion_id: id,
+        position: 1,
+        enabled: true,
+        promotion: newPromo,
+      });
+      this.publish();
+      return newPromo;
+    }
+  }
+
+  deletePromotion(id: string): boolean {
+    this.load();
+    this.promotions = this.promotions.filter((p) => p.id !== id);
+    this.playlist = this.playlist.filter((p) => p.promotion_id !== id);
+    this.publish();
+    return true;
+  }
+
   getManifest(): SignageManifest {
+    this.load();
     const activePromos = this.playlist
       .filter((item) => item.enabled)
       .map((item) => {
@@ -278,10 +446,18 @@ class DevStore {
         if (!promo || !promo.enabled) return null;
 
         let imgUrl =
-          promo.media_id ||
+          (promo.media_id && (promo.media_id.startsWith("/") || promo.media_id.startsWith("http") || promo.media_id.startsWith("data:"))
+            ? promo.media_id
+            : null) ||
+          (promo.media?.thumb_path && !promo.media.thumb_path.includes("photo-1610832958506-aa56368176cf")
+            ? promo.media.thumb_path
+            : null) ||
           (promo.media?.storage_path && promo.media.storage_path !== "demo"
             ? promo.media.storage_path
-            : promo.media?.thumb_path || "");
+            : null) ||
+          promo.media?.thumb_path ||
+          promo.media_id ||
+          "";
 
         if (imgUrl && this.mediaMap && this.mediaMap[imgUrl]) {
           imgUrl = this.mediaMap[imgUrl];
@@ -344,6 +520,7 @@ class DevStore {
 
   publish(): number {
     this.version += 1;
+    this.save();
     return this.version;
   }
 }
@@ -487,6 +664,6 @@ instance.promotions.forEach((promo) => {
   }
 });
 
-instance.publish();
+instance.save();
 
 export const devStore = instance;

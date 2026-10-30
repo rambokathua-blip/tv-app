@@ -210,9 +210,18 @@ export default function PlaylistPage() {
         {items.map((item, index) => {
           const promo = item.promotion;
           const thumb =
+            (promo?.media?.thumb_path && !promo.media.thumb_path.includes("photo-1610832958506-aa56368176cf")
+              ? promo.media.thumb_path
+              : null) ||
+            (promo?.media?.storage_path && promo.media.storage_path !== "demo"
+              ? promo.media.storage_path
+              : null) ||
+            (promo?.media_id && (promo.media_id.startsWith("/") || promo.media_id.startsWith("http") || promo.media_id.startsWith("data:"))
+              ? promo.media_id
+              : null) ||
             promo?.media?.thumb_path ||
-            promo?.media?.storage_path ||
-            "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=400&auto=format&fit=crop";
+            promo?.media_id ||
+            "/kathua-fresh-logo.jpg";
           const duration =
             item.duration_override_sec || promo?.duration_sec || 10;
 

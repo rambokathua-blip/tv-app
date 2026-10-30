@@ -93,6 +93,7 @@ declare global {
 export default function TvPlayerPage() {
   const [token, setToken] = useState<string | null>(null);
   const [isPreview, setIsPreview] = useState(false);
+  const [hidePreviewBanner, setHidePreviewBanner] = useState(false);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [pollSecret, setPollSecret] = useState<string | null>(null);
   const [expiresIn, setExpiresIn] = useState<number>(300);
@@ -1875,9 +1876,11 @@ export default function TvPlayerPage() {
         </button>
       )}
 
-      {/* Preview Label (PRD 9.8) */}
-      {isPreview && (
+      {/* Preview Label (PRD 9.8) - Click to dismiss */}
+      {isPreview && !hidePreviewBanner && (
         <div
+          onClick={() => setHidePreviewBanner(true)}
+          title="Tap to hide banner / बैनर छिपाएं"
           style={{
             position: "absolute",
             top: 20,
@@ -1885,17 +1888,35 @@ export default function TvPlayerPage() {
             transform: "translateX(-50%)",
             backgroundColor: "rgba(234, 88, 12, 0.95)",
             color: "#ffffff",
-            padding: "8px 24px",
-            borderRadius: 20,
+            padding: "8px 20px",
+            borderRadius: 24,
             fontWeight: 800,
-            fontSize: 20,
-            letterSpacing: 2,
+            fontSize: 18,
+            letterSpacing: 1.5,
             textTransform: "uppercase",
             boxShadow: "0 8px 20px rgba(0,0,0,0.5)",
             zIndex: 999,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            userSelect: "none",
+            transition: "all 0.2s ease",
           }}
         >
-          PREVIEW MODE — NOT LIVE ON TV
+          <span>PREVIEW MODE — NOT LIVE ON TV</span>
+          <span
+            style={{
+              fontSize: 11,
+              letterSpacing: 0,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              padding: "3px 8px",
+              borderRadius: 12,
+              fontWeight: 700,
+            }}
+          >
+            ✕ Hide
+          </span>
         </div>
       )}
 
@@ -2069,6 +2090,48 @@ export default function TvPlayerPage() {
                 </div>
               </div>
             </button>
+
+            {/* Action: Switch to 100% Live Mode (Hide Preview Banner) */}
+            {isPreview && (
+              <button
+                onClick={() => {
+                  const liveToken = "live-screen-" + Date.now();
+                  localStorage.setItem("signage_device_token", liveToken);
+                  setToken(liveToken);
+                  setIsPreview(false);
+                  setHidePreviewBanner(true);
+                  const cleanUrl = window.location.pathname;
+                  window.history.replaceState({}, document.title, cleanUrl);
+                  setShowQuickMenu(false);
+                  setSyncToast("Switched to 100% Live TV Mode!");
+                  setTimeout(() => setSyncToast(null), 3000);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(234, 88, 12, 0.16)",
+                  border: "1px solid rgba(234, 88, 12, 0.4)",
+                  color: "#fb923c",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <Tv size={20} style={{ flexShrink: 0, color: "#f97316" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
+                    Go 100% Live (Remove Banner)
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
+                    Hide orange &quot;Preview Mode&quot; badge
+                  </div>
+                </div>
+              </button>
+            )}
 
             {/* Action 3: Switch to Admin Mode */}
             <a

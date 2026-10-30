@@ -97,6 +97,9 @@ export default function OffersManagePage() {
         const data = await res.json();
         if (data.promotions && data.promotions.length > 0) {
           setPromotions(data.promotions);
+          try {
+            localStorage.setItem("kathua_signage_promotions", JSON.stringify(data.promotions));
+          } catch {}
         }
       }
     } catch {
@@ -105,6 +108,15 @@ export default function OffersManagePage() {
   };
 
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem("kathua_signage_promotions");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPromotions(parsed);
+        }
+      }
+    } catch {}
     loadPromotions();
   }, []);
 
@@ -117,6 +129,9 @@ export default function OffersManagePage() {
         : p
     );
     setPromotions(nextList);
+    try {
+      localStorage.setItem("kathua_signage_promotions", JSON.stringify(nextList));
+    } catch {}
 
     try {
       await fetch(`/api/signage/admin/promotions/${promo.id}`, {
@@ -138,7 +153,13 @@ export default function OffersManagePage() {
       await fetch(`/api/signage/admin/promotions/${deleteTarget.id}`, {
         method: "DELETE",
       });
-      setPromotions((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      setPromotions((prev) => {
+        const next = prev.filter((p) => p.id !== deleteTarget.id);
+        try {
+          localStorage.setItem("kathua_signage_promotions", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
       setDeleteTarget(null);
     } catch {
       // ignore
@@ -199,9 +220,18 @@ export default function OffersManagePage() {
       <div className="space-y-3">
         {filtered.map((promo) => {
           const thumb =
+            (promo.media_id && (promo.media_id.startsWith("/") || promo.media_id.startsWith("http") || promo.media_id.startsWith("data:"))
+              ? promo.media_id
+              : null) ||
+            (promo.media?.thumb_path && !promo.media.thumb_path.includes("photo-1610832958506-aa56368176cf")
+              ? promo.media.thumb_path
+              : null) ||
+            (promo.media?.storage_path && promo.media.storage_path !== "demo"
+              ? promo.media.storage_path
+              : null) ||
             promo.media?.thumb_path ||
-            promo.media?.storage_path ||
-            "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=400&auto=format&fit=crop";
+            promo.media_id ||
+            "/kathua-fresh-logo.jpg";
 
           return (
             <div

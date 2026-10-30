@@ -8,6 +8,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.content.Intent
+import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.view.WindowManager
@@ -23,6 +25,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var loadingSpinner: ProgressBar
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private val FILE_CHOOSER_REQUEST_CODE = 2001
 
     // Primary Live TV Screen URL
     private val TV_URL = "https://tv-app-5wzh.vercel.app/tv?preview=true"
@@ -125,6 +130,50 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     loadingSpinner.visibility = View.GONE
                 }
             }
+
+            override fun onShowFileChooser(
+                view: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                // Cancel existing callback if any to prevent webview hanging
+                fileUploadCallback?.onReceiveValue(null)
+                fileUploadCallback = filePathCallback
+
+                try {
+                    val pickIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "image/*"
+                    }
+                    val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
+                        putExtra(Intent.EXTRA_INTENT, pickIntent)
+                        putExtra(Intent.EXTRA_TITLE, "Select Offer Photo")
+                    }
+                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                    return true
+                } catch (e: Exception) {
+                    fileUploadCallback?.onReceiveValue(null)
+                    fileUploadCallback = null
+                    return false
+                }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (fileUploadCallback == null) return
+            val results: Array<Uri>? = if (resultCode == RESULT_OK && data != null) {
+                data.data?.let { arrayOf(it) }
+                    ?: data.clipData?.let { clip ->
+                        Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+                    }
+            } else {
+                null
+            }
+            fileUploadCallback?.onReceiveValue(results)
+            fileUploadCallback = null
         }
     }
 

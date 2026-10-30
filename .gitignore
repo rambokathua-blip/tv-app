@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# android
+.gradle
+android-tv/.gradle/
+android-tv/build/
+android-tv/app/build/

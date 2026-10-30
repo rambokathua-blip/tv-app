@@ -112,6 +112,7 @@ export default function NewOfferModal({
   const [isPublishing, setIsPublishing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -200,7 +201,17 @@ export default function NewOfferModal({
         }
 
         if (!finalMediaId || finalMediaId.startsWith("blob:")) {
-          finalMediaId = imageUrl;
+          if (imageUrl && !imageUrl.startsWith("blob:")) {
+            finalMediaId = imageUrl;
+          } else {
+            // Guaranteed base64 fallback so it never remains a transient blob URL
+            finalMediaId = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = (ev) => resolve((ev.target?.result as string) || "/kathua-fresh-logo.jpg");
+              reader.onerror = () => resolve("/kathua-fresh-logo.jpg");
+              reader.readAsDataURL(imageFile);
+            });
+          }
         }
       } else if (imageUrl && !imageUrl.startsWith("blob:")) {
         finalMediaId = imageUrl;
@@ -246,6 +257,17 @@ export default function NewOfferModal({
 
       const promoData = await promoRes.json();
       const promotionId = promoData.promotion?.id || promoData.id || promoData.data?.id;
+      const createdPromo = promoData.promotion || promoData;
+
+      // Update localStorage immediately so it's permanent across refreshes
+      try {
+        const cached = localStorage.getItem("kathua_signage_promotions");
+        const list = cached ? JSON.parse(cached) : [];
+        if (Array.isArray(list)) {
+          const updated = [createdPromo, ...list.filter((p: any) => p.id !== createdPromo.id)];
+          localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
+        }
+      } catch {}
 
       if (promotionId) {
         // Add to default playlist at position 1 (top of rotation)
@@ -333,29 +355,41 @@ export default function NewOfferModal({
                     </button>
                   </div>
 
-                  {/* Explicit Mobile Change Picture Buttons with Direct Embedded Inputs */}
+                  {/* Hidden inputs triggered explicitly by ref */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+
+                  {/* Explicit Mobile Change Picture Buttons */}
                   <div className="grid grid-cols-2 gap-2 pt-0.5">
-                    <div className="relative py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center"
+                    >
                       <Upload className="w-4 h-4 shrink-0" />
                       <span>Change Picture</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                        onChange={handleFileChange}
-                      />
-                    </div>
-                    <div className="relative py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center overflow-hidden">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
+                    >
                       <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Take New Photo</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                        onChange={handleFileChange}
-                      />
-                    </div>
+                    </button>
                   </div>
 
                   {aspectWarning && (
@@ -371,14 +405,28 @@ export default function NewOfferModal({
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Hidden inputs */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+
                   {/* Direct Input Over Entire Dashed Box */}
-                  <div className="relative border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 shadow-inner overflow-hidden">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                      onChange={handleFileChange}
-                    />
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="relative border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 shadow-inner"
+                  >
                     <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3 mx-auto">
                       <Upload className="w-7 h-7" />
                     </div>
@@ -394,29 +442,24 @@ export default function NewOfferModal({
                     </div>
                   </div>
 
-                  {/* Dual Action Buttons with Direct Embedded Inputs for 100% App & WebView Compatibility */}
+                  {/* Dual Action Buttons */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="relative py-3 px-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-500/25 active:scale-95 transition-all text-center overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="py-3 px-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-500/25 active:scale-95 transition-all text-center"
+                    >
                       <ImageIcon className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span>Choose from Gallery</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                        onChange={handleFileChange}
-                      />
-                    </div>
-                    <div className="relative py-3 px-3 bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-700 active:scale-95 transition-all text-center overflow-hidden">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="py-3 px-3 bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-700 active:scale-95 transition-all text-center"
+                    >
                       <Camera className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span>Take Photo (Camera)</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                        onChange={handleFileChange}
-                      />
-                    </div>
+                    </button>
                   </div>
 
                   <div>

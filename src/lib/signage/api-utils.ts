@@ -29,36 +29,34 @@ export async function requireAdmin(): Promise<
   | { claims: { sub: string; email?: string; [key: string]: unknown }; error?: never }
   | { claims?: never; error: NextResponse }
 > {
+  const isDevOrDemo =
+    process.env.NODE_ENV === "development" ||
+    process.env.ALLOW_DEV_ADMIN !== "false" ||
+    !process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SECRET_KEY.includes("your-secret-key");
+
+  if (isDevOrDemo) {
+    return {
+      claims: {
+        sub: "00000000-0000-0000-0000-000000000001",
+        email: "admin@kathuafresh.in",
+        role: "authenticated",
+      },
+    };
+  }
+
   try {
     const supabase = await createClient();
-    const { data: claimsData, error } = await supabase.auth.getClaims();
+    const { data: userData, error } = await supabase.auth.getUser();
 
-    if (error || !claimsData?.claims?.sub) {
-      if (process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_ADMIN !== "false") {
-        return {
-          claims: {
-            sub: "00000000-0000-0000-0000-000000000001",
-            email: "admin@kathuafresh.in",
-            role: "authenticated",
-          },
-        };
-      }
+    if (error || !userData?.user) {
       return {
         error: errorResponse("UNAUTHORIZED", "Authentication required", 401),
       };
     }
 
-    return { claims: claimsData.claims as { sub: string; email?: string; [key: string]: unknown } };
+    return { claims: { sub: userData.user.id, email: userData.user.email, role: "authenticated" } };
   } catch {
-    if (process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_ADMIN !== "false") {
-      return {
-        claims: {
-          sub: "00000000-0000-0000-0000-000000000001",
-          email: "admin@kathuafresh.in",
-          role: "authenticated",
-        },
-      };
-    }
     return {
       error: errorResponse("UNAUTHORIZED", "Authentication required", 401),
     };
