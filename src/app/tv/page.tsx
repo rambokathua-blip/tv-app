@@ -93,6 +93,25 @@ export default function TvPlayerPage() {
   const [slideProgress, setSlideProgress] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [windowScale, setWindowScale] = useState(() => {
+    if (typeof window !== "undefined") {
+      return Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    }
+    return 1;
+  });
+
+  // Dynamic uniform scaling to fit 1920x1080 canvas into any screen or window without cropping
+  useEffect(() => {
+    const updateScale = () => {
+      const scaleX = window.innerWidth / 1920;
+      const scaleY = window.innerHeight / 1080;
+      setWindowScale(Math.min(scaleX, scaleY));
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, []);
 
   // Live Broadcast Announcement State
   const [activeBroadcast, setActiveBroadcast] = useState<{
@@ -704,15 +723,27 @@ export default function TvPlayerPage() {
   return (
     <div
       style={{
-        width: "1920px",
-        height: "1080px",
-        position: "relative",
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#000000",
         overflow: "hidden",
-        backgroundColor: "#09090b",
-        transformOrigin: "top left",
-        transform: `scale(${typeof window !== "undefined" ? window.innerWidth / 1920 : 1})`,
       }}
     >
+      <div
+        style={{
+          width: "1920px",
+          height: "1080px",
+          position: "relative",
+          overflow: "hidden",
+          backgroundColor: "#09090b",
+          transformOrigin: "center center",
+          transform: `scale(${windowScale})`,
+          flexShrink: 0,
+        }}
+      >
       {/* ============================================================ */}
       {/* ZONE A: PROMOTION AREA (1500 x 844, 16:9)                   */}
       {/* ============================================================ */}
@@ -1812,6 +1843,7 @@ export default function TvPlayerPage() {
         preload="auto"
         style={{ display: "none" }}
       />
+      </div>
     </div>
   );
 }
