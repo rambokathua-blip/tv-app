@@ -208,20 +208,32 @@ export default function OffersManagePage() {
               key={promo.id}
               className="p-3 rounded-2xl bg-slate-900 border border-slate-800/80 flex items-center gap-3.5 hover:border-slate-700 transition-colors"
             >
-              {/* Thumbnail */}
-              <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shrink-0">
+              {/* Thumbnail with quick change image trigger */}
+              <button
+                type="button"
+                onClick={() => setEditTarget(promo)}
+                className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shrink-0 text-left group/thumb"
+                title="Tap to change picture or details"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={thumb}
                   alt={promo.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform"
                 />
-              </div>
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 sm:flex hidden items-center justify-center transition-opacity">
+                  <Pencil className="w-4 h-4 text-white" />
+                </div>
+              </button>
 
-              {/* Details */}
-              <div className="flex-1 min-w-0">
+              {/* Details (clickable to edit) */}
+              <button
+                type="button"
+                onClick={() => setEditTarget(promo)}
+                className="flex-1 min-w-0 text-left"
+              >
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white truncate">
+                  <h3 className="text-sm font-bold text-white truncate hover:text-emerald-400 transition-colors">
                     {promo.title}
                   </h3>
                   <span
@@ -247,8 +259,11 @@ export default function OffersManagePage() {
                     <Clock className="w-3 h-3" />
                     {promo.duration_sec}s
                   </span>
+                  <span className="text-[10px] text-emerald-400 font-semibold underline sm:hidden">
+                    Tap to edit
+                  </span>
                 </div>
-              </div>
+              </button>
 
               {/* Actions */}
               <div className="flex items-center gap-1.5 shrink-0">

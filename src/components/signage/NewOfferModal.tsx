@@ -225,29 +225,65 @@ export default function NewOfferModal({
           {/* STEP 1: CHOOSE IMAGE */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Hidden file inputs for Gallery & Camera (sr-only preserves native touch events on mobile) */}
               <input
-                ref={fileInputRef}
+                id="new-offer-gallery-file"
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
+                accept="image/png,image/jpeg,image/webp,image/*"
+                className="sr-only"
+                onChange={handleFileChange}
+              />
+              <input
+                id="new-offer-camera-file"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
                 onChange={handleFileChange}
               />
 
               {imageUrl ? (
                 <div className="space-y-3">
-                  <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-700 bg-slate-950">
+                  <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={imageUrl}
                       alt="Selected"
                       className="w-full h-full object-cover"
                     />
+                    <div className="absolute top-2.5 left-2.5 px-2.5 py-1 bg-black/75 backdrop-blur-md rounded-lg text-[11px] font-bold text-emerald-400 flex items-center gap-1.5 border border-emerald-500/30">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Photo Selected</span>
+                    </div>
                     <button
-                      onClick={() => setImageUrl("")}
-                      className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black rounded-full text-white"
+                      type="button"
+                      onClick={() => {
+                        setImageUrl("");
+                        setImageFile(null);
+                      }}
+                      title="Remove image"
+                      className="absolute top-2 right-2 p-1.5 bg-black/75 hover:bg-red-600 rounded-full text-white transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  </div>
+
+                  {/* Explicit Mobile Change Picture Buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    <label
+                      htmlFor="new-offer-gallery-file"
+                      className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center"
+                    >
+                      <Upload className="w-4 h-4 shrink-0" />
+                      <span>Change Picture</span>
+                    </label>
+                    <label
+                      htmlFor="new-offer-camera-file"
+                      className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
+                    >
+                      <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Take New Photo</span>
+                    </label>
                   </div>
 
                   {aspectWarning && (
@@ -263,19 +299,42 @@ export default function NewOfferModal({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-slate-950/50 hover:bg-slate-950"
+                  {/* Native Label Trigger for Main Upload Area */}
+                  <label
+                    htmlFor="new-offer-gallery-file"
+                    className="border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 block shadow-inner"
                   >
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3 mx-auto">
                       <Upload className="w-7 h-7" />
                     </div>
-                    <div className="font-semibold text-slate-200 text-sm">
-                      Upload from Gallery or Camera
+                    <div className="font-bold text-white text-sm sm:text-base">
+                      Upload Offer Image
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                      JPG, PNG, WebP (16:9 recommended)
+                      Tap here to choose photo from Phone Gallery or Files
                     </div>
+                    <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/40 rounded-full text-emerald-300 text-xs font-semibold">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>JPG, PNG, WebP</span>
+                    </div>
+                  </label>
+
+                  {/* Dual Action Buttons for Mobile Phone Convenience */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label
+                      htmlFor="new-offer-gallery-file"
+                      className="py-3 px-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-500/25 active:scale-95 transition-all text-center"
+                    >
+                      <ImageIcon className="w-4 h-4 shrink-0 text-emerald-400" />
+                      <span>Choose from Gallery</span>
+                    </label>
+                    <label
+                      htmlFor="new-offer-camera-file"
+                      className="py-3 px-3 bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-700 active:scale-95 transition-all text-center"
+                    >
+                      <Camera className="w-4 h-4 shrink-0 text-emerald-400" />
+                      <span>Take Photo (Camera)</span>
+                    </label>
                   </div>
 
                   <div>
@@ -317,6 +376,29 @@ export default function NewOfferModal({
           {/* STEP 2: DETAILS */}
           {step === 2 && (
             <div className="space-y-4">
+              {imageUrl && (
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageUrl}
+                      alt="Selected"
+                      className="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0"
+                    />
+                    <div className="truncate text-xs text-slate-300 font-medium">
+                      Selected Offer Photo
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-emerald-400 flex items-center gap-1.5 transition-colors shrink-0"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Change Picture</span>
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Offer Title *

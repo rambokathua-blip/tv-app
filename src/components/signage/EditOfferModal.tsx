@@ -4,6 +4,8 @@ import React, { useState, useRef } from "react";
 import {
   X,
   Upload,
+  Camera,
+  ImageIcon,
   AlertTriangle,
   CheckCircle2,
   Clock,
@@ -171,11 +173,20 @@ export default function EditOfferModal({
             <label className="block text-xs font-semibold text-slate-400">
               Offer Image & TV Preview
             </label>
+            {/* Hidden file inputs with sr-only for mobile Gallery & Camera */}
             <input
-              ref={fileInputRef}
+              id="edit-offer-gallery-file"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/*"
+              className="sr-only"
+              onChange={handleFileChange}
+            />
+            <input
+              id="edit-offer-camera-file"
               type="file"
               accept="image/*"
-              className="hidden"
+              capture="environment"
+              className="sr-only"
               onChange={handleFileChange}
             />
 
@@ -199,15 +210,32 @@ export default function EditOfferModal({
                 </div>
               )}
 
-              {/* Change Image Button overlay */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm transition-colors"
+              {/* Top overlay label trigger */}
+              <label
+                htmlFor="edit-offer-gallery-file"
+                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm cursor-pointer border border-white/20 active:scale-95 transition-all shadow-md"
               >
-                <Upload className="w-3.5 h-3.5" />
+                <Upload className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Change Image</span>
-              </button>
+              </label>
+            </div>
+
+            {/* Mobile Prominent Change Picture & Camera Buttons */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <label
+                htmlFor="edit-offer-gallery-file"
+                className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center"
+              >
+                <Upload className="w-4 h-4 shrink-0" />
+                <span>Change Picture</span>
+              </label>
+              <label
+                htmlFor="edit-offer-camera-file"
+                className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
+              >
+                <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Take New Photo</span>
+              </label>
             </div>
 
             {aspectWarning && (
