@@ -69,33 +69,33 @@ export async function PATCH(
   }
 
   const index = devStore.promotions.findIndex((p) => p.id === id);
+  let resolvedMedia = null;
+  if (parsed.data.media_id) {
+    const resolvedPath =
+      devStore.mediaMap[parsed.data.media_id] ||
+      (parsed.data.media_id.startsWith("data:") ||
+      parsed.data.media_id.startsWith("http") ||
+      parsed.data.media_id.startsWith("/")
+        ? parsed.data.media_id
+        : "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop");
+
+    resolvedMedia = {
+      id: parsed.data.media_id,
+      kind: "image" as const,
+      storage_path: resolvedPath,
+      mime: "image/jpeg",
+      bytes: 200000,
+      sha256: "dev-hash",
+      created_at: new Date().toISOString(),
+      thumb_path: resolvedPath,
+    };
+  }
+
   if (index >= 0) {
-    let media = devStore.promotions[index].media;
-    if (parsed.data.media_id) {
-      const resolvedPath =
-        devStore.mediaMap[parsed.data.media_id] ||
-        (parsed.data.media_id.startsWith("data:") ||
-        parsed.data.media_id.startsWith("http") ||
-        parsed.data.media_id.startsWith("/")
-          ? parsed.data.media_id
-          : "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop");
-
-      media = {
-        id: parsed.data.media_id,
-        kind: "image",
-        storage_path: resolvedPath,
-        mime: "image/jpeg",
-        bytes: 200000,
-        sha256: "dev-hash",
-        created_at: new Date().toISOString(),
-        thumb_path: resolvedPath,
-      };
-    }
-
     devStore.promotions[index] = {
       ...devStore.promotions[index],
       ...parsed.data,
-      media,
+      media: resolvedMedia || devStore.promotions[index].media,
       updated_at: new Date().toISOString(),
     } as any;
 
@@ -103,7 +103,29 @@ export async function PATCH(
     return successResponse(devStore.promotions[index]);
   }
 
-  return errorResponse("NOT_FOUND", "Promotion not found", 404);
+  // If promo was deleted or re-created, upsert gracefully
+  const newPromo = {
+    id,
+    title: parsed.data.title || "Offer",
+    price_text: parsed.data.price_text,
+    duration_sec: parsed.data.duration_sec || 10,
+    status: parsed.data.status || "live",
+    enabled: parsed.data.enabled ?? true,
+    media: resolvedMedia,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  devStore.promotions.unshift(newPromo as any);
+  devStore.playlist.push({
+    id: "pl-" + Date.now(),
+    playlist_id: "default",
+    promotion_id: id,
+    position: devStore.playlist.length + 1,
+    enabled: true,
+    promotion: newPromo as any,
+  });
+  devStore.publish();
+  return successResponse(newPromo);
 }
 
 export async function DELETE(
