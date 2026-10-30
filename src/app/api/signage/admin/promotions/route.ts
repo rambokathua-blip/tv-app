@@ -11,6 +11,7 @@ import {
 } from "@/lib/signage/schemas";
 import { devStore } from "@/lib/signage/dev-store";
 
+
 export async function GET(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;

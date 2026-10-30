@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 
 import { devStore } from "@/lib/signage/dev-store";
 
+
 /**
  * Device fetches the full manifest for the current version.
  * Supports ETag/If-None-Match for efficient polling.

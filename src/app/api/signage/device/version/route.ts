@@ -7,6 +7,7 @@ import {
 
 import { devStore } from "@/lib/signage/dev-store";
 
+
 /**
  * Device polls this to check the current version number.
  * Very lightweight — just returns the version number.
