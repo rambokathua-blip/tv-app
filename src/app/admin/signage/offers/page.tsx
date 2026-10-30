@@ -11,9 +11,11 @@ import {
   MoreVertical,
   CheckCircle2,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 import type { Promotion, PromotionStatus } from "@/lib/signage/types";
 import NewOfferModal from "@/components/signage/NewOfferModal";
+import EditOfferModal from "@/components/signage/EditOfferModal";
 
 export default function OffersManagePage() {
   const [filter, setFilter] = useState<string>("all");
@@ -84,6 +86,7 @@ export default function OffersManagePage() {
   ]);
 
   const [showModal, setShowModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<Promotion | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Promotion | null>(null);
 
   // Fetch promotions from API
@@ -250,6 +253,14 @@ export default function OffersManagePage() {
               {/* Actions */}
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
+                  onClick={() => setEditTarget(promo)}
+                  title="Edit offer"
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                >
+                  <Pencil className="w-4 h-4 text-emerald-400" />
+                </button>
+
+                <button
                   onClick={() => handleToggle(promo)}
                   title={promo.status === "paused" ? "Resume" : "Pause"}
                   className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
@@ -314,6 +325,19 @@ export default function OffersManagePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Offer Modal */}
+      {editTarget && (
+        <EditOfferModal
+          promo={editTarget}
+          isOpen={Boolean(editTarget)}
+          onClose={() => setEditTarget(null)}
+          onUpdated={() => {
+            setEditTarget(null);
+            loadPromotions();
+          }}
+        />
       )}
 
       {/* New Offer Modal */}

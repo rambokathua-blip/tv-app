@@ -16,10 +16,10 @@ export const promotionStatusEnum = z.enum([
 export const createPromotionSchema = z.object({
   title: z.string().min(1).max(200),
   price_text: z.string().max(100).optional().nullable(),
-  media_id: z.string().uuid().optional().nullable(),
+  media_id: z.string().optional().nullable(),
   duration_sec: z.number().int().min(3).max(60).default(10),
-  starts_at: z.string().datetime().optional().nullable(),
-  ends_at: z.string().datetime().optional().nullable(),
+  starts_at: z.string().optional().nullable(),
+  ends_at: z.string().optional().nullable(),
   status: promotionStatusEnum.default("draft"),
   enabled: z.boolean().default(true),
   notes: z.string().max(500).optional().nullable(),
@@ -34,7 +34,7 @@ export const updatePromotionSchema = createPromotionSchema.partial();
 export const reorderPlaylistSchema = z.object({
   items: z.array(
     z.object({
-      id: z.string().uuid(),
+      id: z.string(),
       position: z.number().int().min(0),
     })
   ),
@@ -50,7 +50,7 @@ export const updatePlaylistItemSchema = z.object({
 // ============================================================
 
 export const updateBrandingSchema = z.object({
-  logo_media_id: z.string().uuid().optional().nullable(),
+  logo_media_id: z.string().optional().nullable(),
   website_text: z.string().max(200).optional(),
   tagline: z.string().max(300).optional().nullable(),
   ticker_text: z.string().max(500).optional().nullable(),

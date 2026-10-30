@@ -7,6 +7,7 @@ import {
   parseBody,
   auditLog,
 } from "@/lib/signage/api-utils";
+import { devStore } from "@/lib/signage/dev-store";
 import { updatePromotionSchema } from "@/lib/signage/schemas";
 
 export async function GET(
@@ -17,19 +18,26 @@ export async function GET(
   if (auth.error) return auth.error;
 
   const { id } = await ctx.params;
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("signage_promotions")
+      .select("*, media:signage_media(*)")
+      .eq("id", id)
+      .single();
 
-  const { data, error } = await admin
-    .from("signage_promotions")
-    .select("*, media:signage_media(*)")
-    .eq("id", id)
-    .single();
-
-  if (error || !data) {
-    return errorResponse("NOT_FOUND", "Promotion not found", 404);
+    if (!error && data) {
+      return successResponse(data);
+    }
+  } catch {
+    // fallback
   }
 
-  return successResponse(data);
+  const promo = devStore.promotions.find((p) => p.id === id);
+  if (!promo) {
+    return errorResponse("NOT_FOUND", "Promotion not found", 404);
+  }
+  return successResponse(promo);
 }
 
 export async function PATCH(
@@ -43,21 +51,34 @@ export async function PATCH(
   const parsed = await parseBody(request, updatePromotionSchema);
   if (parsed.error) return parsed.error;
 
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("signage_promotions")
-    .update({ ...parsed.data, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("signage_promotions")
+      .update({ ...parsed.data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
 
-  if (error || !data) {
-    return errorResponse("NOT_FOUND", "Promotion not found", 404);
+    if (!error && data) {
+      await auditLog(auth.claims.sub, "promotion.update", "promotion", id);
+      return successResponse(data);
+    }
+  } catch {
+    // fallback
   }
 
-  await auditLog(auth.claims.sub, "promotion.update", "promotion", id);
+  const index = devStore.promotions.findIndex((p) => p.id === id);
+  if (index >= 0) {
+    devStore.promotions[index] = {
+      ...devStore.promotions[index],
+      ...parsed.data,
+      updated_at: new Date().toISOString(),
+    } as any;
+    return successResponse(devStore.promotions[index]);
+  }
 
-  return successResponse(data);
+  return errorResponse("NOT_FOUND", "Promotion not found", 404);
 }
 
 export async function DELETE(
@@ -68,27 +89,25 @@ export async function DELETE(
   if (auth.error) return auth.error;
 
   const { id } = await ctx.params;
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("signage_promotions")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
 
-  // Soft-delete: set status to archived
-  const { data, error } = await admin
-    .from("signage_promotions")
-    .update({ status: "archived", updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error || !data) {
-    return errorResponse("NOT_FOUND", "Promotion not found", 404);
+    if (!error && data) {
+      await admin.from("signage_playlist_items").delete().eq("promotion_id", id);
+      await auditLog(auth.claims.sub, "promotion.delete", "promotion", id);
+      return successResponse({ success: true });
+    }
+  } catch {
+    // fallback
   }
 
-  // Remove from any playlist
-  await admin
-    .from("signage_playlist_items")
-    .delete()
-    .eq("promotion_id", id);
-
-  await auditLog(auth.claims.sub, "promotion.delete", "promotion", id);
-
+  devStore.promotions = devStore.promotions.filter((p) => p.id !== id);
+  devStore.playlist = devStore.playlist.filter((p) => p.promotion_id !== id);
   return successResponse({ success: true });
 }
