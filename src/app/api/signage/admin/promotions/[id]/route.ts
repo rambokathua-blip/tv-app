@@ -71,16 +71,18 @@ export async function PATCH(
   const index = devStore.promotions.findIndex((p) => p.id === id);
   let resolvedMedia = null;
   if (parsed.data.media_id) {
+    const rawId = parsed.data.media_id;
     const resolvedPath =
-      devStore.mediaMap[parsed.data.media_id] ||
-      (parsed.data.media_id.startsWith("data:") ||
-      parsed.data.media_id.startsWith("http") ||
-      parsed.data.media_id.startsWith("/")
-        ? parsed.data.media_id
-        : "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop");
+      devStore.mediaMap[rawId] ||
+      (!rawId.startsWith("blob:") &&
+      (rawId.startsWith("data:") ||
+        rawId.startsWith("http") ||
+        rawId.startsWith("/"))
+        ? rawId
+        : "/kathua-fresh-logo.jpg");
 
     resolvedMedia = {
-      id: parsed.data.media_id,
+      id: rawId,
       kind: "image" as const,
       storage_path: resolvedPath,
       mime: "image/jpeg",
@@ -92,12 +94,21 @@ export async function PATCH(
   }
 
   if (index >= 0) {
-    devStore.promotions[index] = {
+    const updatedPromo = {
       ...devStore.promotions[index],
       ...parsed.data,
+      media_id: parsed.data.media_id || devStore.promotions[index].media_id,
       media: resolvedMedia || devStore.promotions[index].media,
       updated_at: new Date().toISOString(),
     } as any;
+
+    devStore.promotions[index] = updatedPromo;
+
+    // Update promotion inside playlist item so TV instantly shows it
+    const playlistItem = devStore.playlist.find((pl) => pl.promotion_id === id);
+    if (playlistItem) {
+      playlistItem.promotion = updatedPromo;
+    }
 
     devStore.publish();
     return successResponse(devStore.promotions[index]);
@@ -112,15 +123,16 @@ export async function PATCH(
     status: parsed.data.status || "live",
     enabled: parsed.data.enabled ?? true,
     media: resolvedMedia,
+    media_id: parsed.data.media_id || resolvedMedia?.storage_path,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
   devStore.promotions.unshift(newPromo as any);
-  devStore.playlist.push({
+  devStore.playlist.unshift({
     id: "pl-" + Date.now(),
     playlist_id: "default",
     promotion_id: id,
-    position: devStore.playlist.length + 1,
+    position: 1,
     enabled: true,
     promotion: newPromo as any,
   });
@@ -156,5 +168,6 @@ export async function DELETE(
 
   devStore.promotions = devStore.promotions.filter((p) => p.id !== id);
   devStore.playlist = devStore.playlist.filter((p) => p.promotion_id !== id);
+  devStore.publish();
   return successResponse({ success: true });
 }

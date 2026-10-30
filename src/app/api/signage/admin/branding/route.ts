@@ -4,60 +4,80 @@ import {
   successResponse,
   errorResponse,
 } from "@/lib/signage/api-utils";
+import { devStore } from "@/lib/signage/dev-store";
 
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
+    const { data: branding, error } = await admin
+      .from("signage_branding")
+      .select("*, logo:signage_media(*)")
+      .limit(1)
+      .single();
 
-  const { data: branding } = await admin
-    .from("signage_branding")
-    .select("*, logo:signage_media(*)")
-    .limit(1)
-    .single();
-
-  if (!branding) {
-    return errorResponse("NOT_FOUND", "Branding not found", 404);
+    if (!error && branding) {
+      return successResponse(branding);
+    }
+  } catch {
+    // fallback to devStore
   }
 
-  return successResponse(branding);
+  return successResponse(devStore.branding);
 }
 
 export async function PATCH(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
-  let body;
+  let body: any;
   try {
     body = await request.json();
   } catch {
     return errorResponse("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  // Get the current branding row id
-  const { data: existing } = await admin
-    .from("signage_branding")
-    .select("id")
-    .limit(1)
-    .single();
+    // Get the current branding row id
+    const { data: existing } = await admin
+      .from("signage_branding")
+      .select("id")
+      .limit(1)
+      .single();
 
-  if (!existing) {
-    return errorResponse("NOT_FOUND", "Branding config not found", 404);
+    if (existing) {
+      const { data, error } = await admin
+        .from("signage_branding")
+        .update({ ...body, updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        devStore.branding = {
+          ...devStore.branding,
+          ...data,
+        };
+        devStore.publish();
+        return successResponse(data);
+      }
+    }
+  } catch {
+    // fallback to devStore
   }
 
-  const { data, error } = await admin
-    .from("signage_branding")
-    .update({ ...body, updated_at: new Date().toISOString() })
-    .eq("id", existing.id)
-    .select()
-    .single();
+  // DevStore fallback: update and publish immediately
+  devStore.branding = {
+    ...devStore.branding,
+    ...body,
+    updated_at: new Date().toISOString(),
+  };
+  devStore.publish();
 
-  if (error) {
-    return errorResponse("DB_ERROR", error.message, 500);
-  }
-
-  return successResponse(data);
+  return successResponse(devStore.branding);
 }
+

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "keep-alive": "node -e \"fetch('https://ydiqwdhbxviqcimfifwz.supabase.co/auth/v1/health', { headers: { apikey: 'sb_publishable_YnBDTW4T6NN6KHhluoVr1Q_YY0Arz2f' } }).then(r => r.json()).then(d => console.log('Supabase Active:', d)).catch(console.error)\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

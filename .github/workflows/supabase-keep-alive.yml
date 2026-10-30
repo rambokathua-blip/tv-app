@@ -1,0 +1,26 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Runs every 3 days at 00:00 UTC (Supabase pauses after 7 days of inactivity)
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Project API & Auth
+        run: |
+          echo "Pinging Supabase project to prevent auto-pause..."
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_YnBDTW4T6NN6KHhluoVr1Q_YY0Arz2f' }}" \
+            "https://ydiqwdhbxviqcimfifwz.supabase.co/auth/v1/health")
+          
+          echo "Response: $RESPONSE"
+          
+          if echo "$RESPONSE" | grep -q "HTTP_STATUS:200"; then
+            echo "✅ Supabase project ping successful! Activity registered, auto-pause prevented."
+          else
+            echo "⚠️ Warning: Ping received non-200 status, check project status."
+          fi

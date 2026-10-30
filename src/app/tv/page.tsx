@@ -38,8 +38,7 @@ const FALLBACK_MANIFEST: SignageManifest = {
       title: "Welcome to Kathua Fresh",
       price_text: "Fresh & Organic Daily",
       duration_sec: 10,
-      image_url:
-        "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop",
+      image_url: "/kathua-fresh-logo.jpg",
     },
     {
       id: "demo-onion",
@@ -95,6 +94,17 @@ export default function TvPlayerPage() {
   const [isOffline, setIsOffline] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
+  // Live Broadcast Announcement State
+  const [activeBroadcast, setActiveBroadcast] = useState<{
+    id: string;
+    text: string;
+    lang: string;
+    audio_url?: string | null;
+  } | null>(null);
+  const lastBroadcastIdRef = useRef<string | null>(null);
+  const announcementAudioRef = useRef<HTMLAudioElement | null>(null);
+  const wasBgPlayingRef = useRef<boolean>(false);
+
   // Background Audio State & Controls
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -114,6 +124,9 @@ export default function TvPlayerPage() {
       audio.volume = Math.max(0, Math.min(1, audioConfig.volume));
     }
 
+    // Do not resume background audio if a live announcement is currently broadcasting
+    if (activeBroadcast) return;
+
     if (shouldPlay) {
       const playPromise = audio.play();
       if (playPromise !== undefined) {
@@ -132,7 +145,7 @@ export default function TvPlayerPage() {
       audio.pause();
       setIsAudioPlaying(false);
     }
-  }, [manifest.audio, isAudioMuted]);
+  }, [manifest.audio, isAudioMuted, activeBroadcast]);
 
   // Click / Key gesture to unblock autoplay
   useEffect(() => {
@@ -313,7 +326,7 @@ export default function TvPlayerPage() {
   useEffect(() => {
     if (!token && !isPreview) return;
 
-    // Version polling every 20 seconds
+    // Version polling every 3.5 seconds for instant real-time broadcasts
     const versionPoll = setInterval(async () => {
       try {
         const headers: Record<string, string> = {};
@@ -329,7 +342,7 @@ export default function TvPlayerPage() {
       } catch {
         setIsOffline(true);
       }
-    }, 20000);
+    }, 3500);
 
     // Heartbeat every 60 seconds
     const heartbeatTimer = setInterval(async () => {
@@ -352,6 +365,9 @@ export default function TvPlayerPage() {
             cache_mb: 120,
           }),
         });
+
+        // Background ping to Supabase keep-alive endpoint
+        fetch("/api/keep-alive").catch(() => {});
       } catch {
         // Ignore heartbeat error
       }
@@ -362,6 +378,105 @@ export default function TvPlayerPage() {
       clearInterval(heartbeatTimer);
     };
   }, [token, isPreview, manifest.version, manifest.slides, currentIndex, fetchManifest]);
+
+  // Listen for Live Broadcast Announcements
+  useEffect(() => {
+    const ann = manifest.active_announcement;
+    if (!ann || !ann.id || ann.id === lastBroadcastIdRef.current) return;
+
+    lastBroadcastIdRef.current = ann.id;
+    setActiveBroadcast(ann);
+
+    // ZERO-COLLISION: Completely pause background audio while broadcast plays
+    const bgAudio = audioRef.current;
+    if (bgAudio && !bgAudio.paused) {
+      wasBgPlayingRef.current = true;
+      bgAudio.pause();
+    } else {
+      wasBgPlayingRef.current = false;
+    }
+
+    const speechVolume = manifest.voice?.settings?.volume ? manifest.voice.settings.volume / 100 : 1;
+
+    // Helper to safely restore background audio after announcement completes fully
+    const resumeBackground = () => {
+      setTimeout(() => {
+        setActiveBroadcast(null);
+        const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
+        const isRemotelyEnabled = audioConfig?.enabled ?? true;
+        if (wasBgPlayingRef.current && isRemotelyEnabled && !isAudioMuted && audioRef.current) {
+          audioRef.current.play().catch(() => {});
+        }
+      }, 800);
+    };
+
+    // Realistic Natural Voice URL
+    const langCode = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi" : "en";
+    const ttsUrl =
+      ann.audio_url ||
+      `/api/signage/admin/voice/tts?text=${encodeURIComponent(ann.text)}&lang=${langCode}`;
+
+    const annAudio = announcementAudioRef.current;
+    if (annAudio) {
+      annAudio.pause();
+      annAudio.src = ttsUrl;
+      annAudio.volume = Math.max(0.1, Math.min(1, speechVolume));
+
+      annAudio.onended = () => {
+        resumeBackground();
+      };
+
+      annAudio.onerror = () => {
+        // Fallback to browser SpeechSynthesis if network stream fails
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(ann.text);
+          utterance.lang = ann.lang || "hi-IN";
+          utterance.rate = 0.95;
+          utterance.volume = speechVolume;
+          utterance.onend = resumeBackground;
+          utterance.onerror = resumeBackground;
+          window.speechSynthesis.speak(utterance);
+        } else if ((window as any).AndroidSignage?.speak) {
+          (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
+          setTimeout(resumeBackground, 6000);
+        } else {
+          resumeBackground();
+        }
+      };
+
+      const playPromise = annAudio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(ann.text);
+            utterance.lang = ann.lang || "hi-IN";
+            utterance.rate = 0.95;
+            utterance.volume = speechVolume;
+            utterance.onend = resumeBackground;
+            utterance.onerror = resumeBackground;
+            window.speechSynthesis.speak(utterance);
+          } else {
+            resumeBackground();
+          }
+        });
+      }
+    } else {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(ann.text);
+        utterance.lang = ann.lang || "hi-IN";
+        utterance.rate = 0.95;
+        utterance.volume = speechVolume;
+        utterance.onend = resumeBackground;
+        utterance.onerror = resumeBackground;
+        window.speechSynthesis.speak(utterance);
+      } else {
+        resumeBackground();
+      }
+    }
+  }, [manifest.active_announcement, isAudioMuted, manifest.audio, manifest.voice?.settings]);
 
   // Generate SVG QR codes for manifest QR items
   useEffect(() => {
@@ -626,6 +741,11 @@ export default function TvPlayerPage() {
             <img
               src={currentSlide.image_url}
               alt={currentSlide.title}
+              onError={(e) => {
+                if (e.currentTarget.src !== "/kathua-fresh-logo.jpg") {
+                  e.currentTarget.src = "/kathua-fresh-logo.jpg";
+                }
+              }}
               style={{
                 width: "100%",
                 height: "100%",
@@ -689,6 +809,11 @@ export default function TvPlayerPage() {
               <img
                 src={nextSlide.image_url}
                 alt={nextSlide.title}
+                onError={(e) => {
+                  if (e.currentTarget.src !== "/kathua-fresh-logo.jpg") {
+                    e.currentTarget.src = "/kathua-fresh-logo.jpg";
+                  }
+                }}
                 style={{
                   width: "100%",
                   height: "100%",
@@ -696,6 +821,98 @@ export default function TvPlayerPage() {
                 }}
               />
             )}
+          </div>
+        )}
+
+        {/* On-Air Live Announcement Overlay Banner */}
+        {activeBroadcast && (
+          <div
+            style={{
+              position: "absolute",
+              top: 28,
+              left: 36,
+              right: 36,
+              zIndex: 40,
+              backgroundColor: "rgba(2, 44, 34, 0.94)",
+              backdropFilter: "blur(24px)",
+              border: "3px solid #22c55e",
+              borderRadius: 24,
+              padding: "20px 32px",
+              boxShadow: "0 25px 60px rgba(0,0,0,0.85), 0 0 35px rgba(34, 197, 94, 0.4)",
+              display: "flex",
+              alignItems: "center",
+              gap: 24,
+            }}
+          >
+            {/* Pulsing Speaker Icon */}
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 20,
+                backgroundColor: "#22c55e",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 0 30px #22c55e",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 40 }}>📢</span>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "#86efac",
+                  }}
+                >
+                  Live Store Announcement • दुकान सूचना
+                </span>
+                <span
+                  style={{
+                    backgroundColor: "#ef4444",
+                    color: "#ffffff",
+                    fontSize: 11,
+                    fontWeight: 900,
+                    padding: "3px 10px",
+                    borderRadius: 12,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      backgroundColor: "#fff",
+                    }}
+                  />
+                  Broadcasting Now
+                </span>
+              </div>
+
+              <div
+                style={{
+                  fontSize: 32,
+                  fontWeight: 900,
+                  color: "#ffffff",
+                  lineHeight: 1.25,
+                  textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+                }}
+              >
+                &ldquo;{activeBroadcast.text}&rdquo;
+              </div>
+            </div>
           </div>
         )}
 
@@ -716,7 +933,8 @@ export default function TvPlayerPage() {
       </div>
 
       {/* ============================================================ */}
-      {/* ZONE B: BRAND PANEL (Top-right, 420 x 150)                   */}
+      {/* ============================================================ */}
+      {/* ZONE B & C: CREATIVE BRAND & IRRESISTIBLE SMART QR SIDEBAR   */}
       {/* ============================================================ */}
       <div
         style={{
@@ -724,105 +942,643 @@ export default function TvPlayerPage() {
           top: 0,
           right: 0,
           width: 420,
-          height: 150,
-          background: "linear-gradient(180deg, #064e3b 0%, #065f46 100%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "10px 16px",
-          borderBottom: "2px solid rgba(255, 255, 255, 0.1)",
-          boxShadow: "-10px 0 25px rgba(0,0,0,0.4)",
-          overflow: "hidden",
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={manifest.branding?.logo_url || "/kathua-fresh-logo.jpg"}
-          alt="Kathua Fresh Logo"
-          style={{
-            maxHeight: 130,
-            maxWidth: 390,
-            borderRadius: 14,
-            objectFit: "contain",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-          }}
-        />
-      </div>
-
-      {/* ============================================================ */}
-      {/* ZONE C: QR PANEL (Right side, 420 x 694)                     */}
-      {/* ============================================================ */}
-      <div
-        style={{
-          position: "absolute",
-          top: 150,
-          right: 0,
-          width: 420,
-          height: 694,
-          backgroundColor: "#0f172a",
+          height: 844,
+          background: "linear-gradient(180deg, #021a12 0%, #06281e 20%, #081d2a 60%, #05121b 100%)",
+          borderLeft: "2px solid rgba(34, 197, 94, 0.32)",
+          boxShadow: "-12px 0 35px rgba(0, 0, 0, 0.65), inset 1px 0 0 rgba(255, 255, 255, 0.08)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "space-evenly",
-          padding: "24px 20px",
-          borderLeft: "2px solid rgba(255, 255, 255, 0.08)",
-          boxShadow: "-10px 0 30px rgba(0,0,0,0.5)",
+          padding: "16px 16px 14px",
+          overflow: "hidden",
+          zIndex: 20,
         }}
       >
-        {manifest.qr_codes?.slice(0, 2).map((qr) => (
+        {/* Ambient Neon Glow Backlight */}
+        <div
+          style={{
+            position: "absolute",
+            top: -50,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 380,
+            height: 260,
+            background: "radial-gradient(ellipse at center, rgba(34, 197, 94, 0.25) 0%, transparent 70%)",
+            pointerEvents: "none",
+            filter: "blur(24px)",
+          }}
+        />
+
+        {/* ========================================================== */}
+        {/* 1. CREATIVE BRAND HEADER: CIRCULAR LOGO & STORE SHOWCASE   */}
+        {/* ========================================================== */}
+        <div
+          style={{
+            width: "100%",
+            borderRadius: 20,
+            background: "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)",
+            border: "1px solid rgba(34, 197, 94, 0.3)",
+            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15)",
+            backdropFilter: "blur(14px)",
+            padding: "12px 14px",
+            marginBottom: 12,
+            position: "relative",
+          }}
+        >
+          {/* Circular Logo & Brand Info Row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {/* Glowing Circular Avatar Frame */}
+            <div
+              style={{
+                position: "relative",
+                width: 82,
+                height: 82,
+                borderRadius: "50%",
+                padding: 3,
+                background: "linear-gradient(135deg, #22c55e 0%, #10b981 50%, #facc15 100%)",
+                boxShadow: "0 0 24px rgba(34, 197, 94, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.4)",
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: "50%",
+                  overflow: "hidden",
+                  backgroundColor: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "inset 0 2px 6px rgba(0, 0, 0, 0.2)",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={manifest.branding?.logo_url || "/kathua-fresh-logo.jpg"}
+                  alt="Kathua Fresh Logo"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+              </div>
+
+              {/* Verified Green Checkmark Badge */}
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: -1,
+                  right: -1,
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  backgroundColor: "#22c55e",
+                  border: "2px solid #06281e",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.6)",
+                }}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Brand Title & Live Beacon */}
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 900,
+                  color: "#ffffff",
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                  lineHeight: 1.1,
+                  textShadow: "0 2px 10px rgba(0, 0, 0, 0.6)",
+                }}
+              >
+                Kathua Fresh
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#86efac",
+                  letterSpacing: 1.8,
+                  textTransform: "uppercase",
+                  marginTop: 3,
+                }}
+              >
+                Always Fresh • Direct Mandi
+              </div>
+
+              {/* Live Store Beacon Pill */}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginTop: 6,
+                  alignSelf: "flex-start",
+                  padding: "3px 10px",
+                  borderRadius: 12,
+                  backgroundColor: "rgba(34, 197, 94, 0.16)",
+                  border: "1px solid rgba(34, 197, 94, 0.4)",
+                  boxShadow: "0 0 12px rgba(34, 197, 94, 0.2)",
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    backgroundColor: "#22c55e",
+                    boxShadow: "0 0 8px #22c55e",
+                    display: "inline-block",
+                    animation: "pulse 2s infinite",
+                  }}
+                />
+                <span style={{ fontSize: 10, fontWeight: 900, color: "#4ade80", letterSpacing: 1.2 }}>
+                  LIVE STORE TV
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Perks Pill Bar */}
           <div
-            key={qr.id}
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.05)",
-              borderRadius: 24,
-              padding: "16px 20px",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
-              width: 370,
-              boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+              justifyContent: "space-between",
+              gap: 8,
+              marginTop: 10,
+              paddingTop: 8,
+              borderTop: "1px solid rgba(255, 255, 255, 0.08)",
             }}
           >
             <div
               style={{
-                backgroundColor: "#ffffff",
-                padding: 10,
-                borderRadius: 16,
-                width: 220,
-                height: 220,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              dangerouslySetInnerHTML={{ __html: qrSvgMap[qr.id] || "" }}
-            />
-            <div
-              style={{
-                fontSize: 22,
+                flex: 1,
+                fontSize: 10,
                 fontWeight: 800,
-                color: "#22c55e",
-                marginTop: 12,
+                color: "#e2e8f0",
+                backgroundColor: "rgba(0, 0, 0, 0.25)",
+                padding: "4px 8px",
+                borderRadius: 8,
                 textAlign: "center",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
               }}
             >
-              {qr.label}
+              🌱 100% Farm Fresh
             </div>
-            {qr.caption && (
+            <div
+              style={{
+                flex: 1,
+                fontSize: 10,
+                fontWeight: 800,
+                color: "#fef08a",
+                backgroundColor: "rgba(0, 0, 0, 0.25)",
+                padding: "4px 8px",
+                borderRadius: 8,
+                textAlign: "center",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+              }}
+            >
+              🏷️ Wholesale Rates
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================== */}
+        {/* 2. CREATIVE IRRESISTIBLE SMART QR CARDS (WA & IG)          */}
+        {/* ========================================================== */}
+        <div
+          style={{
+            width: "100%",
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          {manifest.qr_codes?.slice(0, 2).map((qr) => {
+            const isWhatsApp =
+              qr.label.toLowerCase().includes("whatsapp") ||
+              qr.target_url.toLowerCase().includes("wa") ||
+              qr.target_url.toLowerCase().includes("whatsapp");
+
+            const isInstagram =
+              qr.label.toLowerCase().includes("instagram") ||
+              qr.target_url.toLowerCase().includes("instagram") ||
+              qr.target_url.toLowerCase().includes("ig");
+
+            const theme = isWhatsApp
+              ? {
+                  cardBg:
+                    "linear-gradient(155deg, rgba(7, 94, 84, 0.42) 0%, rgba(18, 140, 126, 0.22) 45%, rgba(4, 20, 15, 0.9) 100%)",
+                  cardBorder: "rgba(37, 211, 102, 0.45)",
+                  cardGlow: "rgba(37, 211, 102, 0.22)",
+                  badgeBg: "#25D366",
+                  badgeShadow: "0 4px 14px rgba(37, 211, 102, 0.45)",
+                  cornerColor: "#25D366",
+                  btnBg: "linear-gradient(90deg, #128C7E 0%, #25D366 100%)",
+                  btnShadow: "0 4px 16px rgba(37, 211, 102, 0.35)",
+                  title: "WHATSAPP CHANNEL",
+                  subtitle: "Daily Wholesale Mandi Rates",
+                  chip: "JOIN FREE",
+                  chipColor: "#25D366",
+                  ctaText: "Point Camera to Join",
+                  fallbackImg: "/qr-whatsapp.png",
+                  logoSvg: (
+                    <svg viewBox="0 0 32 32" width="22" height="22" fill="#ffffff">
+                      <path d="M16 2C8.28 2 2 8.28 2 16c0 2.72.78 5.26 2.12 7.42L2 30l6.76-2.08C10.84 29.18 13.34 30 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2zm8.16 20.12c-.34.96-1.7 1.76-2.78 1.98-.74.16-1.72.28-4.96-1.06-4.16-1.72-6.84-5.96-7.04-6.24-.22-.28-1.7-2.26-1.7-4.32s1.08-3.08 1.46-3.5c.38-.42.84-.52 1.12-.52.28 0 .56 0 .8.02.26.02.6-.1.94.72.34.84 1.18 2.88 1.28 3.08.1.22.16.48.02.76-.14.28-.22.46-.42.7-.2.24-.44.52-.62.7-.2.24-.42.42-.18.82.24.4 1.06 1.76 2.3 2.86 1.58 1.42 2.92 1.86 3.34 2.06.42.2.66.18.9-.1.26-.28 1.08-1.26 1.36-1.7.3-.42.58-.36.98-.2.4.16 2.54 1.2 2.98 1.42.44.22.74.34.84.52.12.2.12 1.14-.22 2.1z" />
+                    </svg>
+                  ),
+                  centerLogo: (
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: "50%",
+                        backgroundColor: "#25D366",
+                        border: "2.5px solid #ffffff",
+                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <svg viewBox="0 0 32 32" width="18" height="18" fill="#ffffff">
+                        <path d="M16 2C8.28 2 2 8.28 2 16c0 2.72.78 5.26 2.12 7.42L2 30l6.76-2.08C10.84 29.18 13.34 30 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2zm8.16 20.12c-.34.96-1.7 1.76-2.78 1.98-.74.16-1.72.28-4.96-1.06-4.16-1.72-6.84-5.96-7.04-6.24-.22-.28-1.7-2.26-1.7-4.32s1.08-3.08 1.46-3.5c.38-.42.84-.52 1.12-.52.28 0 .56 0 .8.02.26.02.6-.1.94.72.34.84 1.18 2.88 1.28 3.08.1.22.16.48.02.76-.14.28-.22.46-.42.7-.2.24-.44.52-.62.7-.2.24-.42.42-.18.82.24.4 1.06 1.76 2.3 2.86 1.58 1.42 2.92 1.86 3.34 2.06.42.2.66.18.9-.1.26-.28 1.08-1.26 1.36-1.7.3-.42.58-.36.98-.2.4.16 2.54 1.2 2.98 1.42.44.22.74.34.84.52.12.2.12 1.14-.22 2.1z" />
+                      </svg>
+                    </div>
+                  ),
+                }
+              : isInstagram
+              ? {
+                  cardBg:
+                    "linear-gradient(155deg, rgba(131, 58, 180, 0.38) 0%, rgba(253, 29, 29, 0.22) 45%, rgba(20, 10, 28, 0.9) 100%)",
+                  cardBorder: "rgba(253, 29, 29, 0.45)",
+                  cardGlow: "rgba(253, 29, 29, 0.22)",
+                  badgeBg: "linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
+                  badgeShadow: "0 4px 14px rgba(253, 29, 29, 0.45)",
+                  cornerColor: "#FD1D1D",
+                  btnBg: "linear-gradient(90deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
+                  btnShadow: "0 4px 16px rgba(253, 29, 29, 0.35)",
+                  title: "INSTAGRAM REELS",
+                  subtitle: "@kathua_fresh • Offers & Stories",
+                  chip: "FOLLOW",
+                  chipColor: "#FD1D1D",
+                  ctaText: "Point Camera to Follow",
+                  fallbackImg: "/qr-instagram.jpg",
+                  logoSvg: (
+                    <svg viewBox="0 0 32 32" width="22" height="22" fill="#ffffff">
+                      <path d="M16 4.9c3.6 0 4 .02 5.4.08 3.5.16 5.1 1.74 5.2 5.2.06 1.4.08 1.8.08 5.4s-.02 4-.08 5.4c-.16 3.5-1.74 5.1-5.2 5.2-1.4.06-1.8.08-5.4.08s-4-.02-5.4-.08c-3.5-.16-5.1-1.74-5.2-5.2-.06-1.4-.08-1.8-.08-5.4s.02-4 .08-5.4c.16-3.5 1.74-5.1 5.2-5.2 1.4-.06 1.8-.08 5.4-.08m0-2.9c-3.7 0-4.1.02-5.6.08-4.8.22-7.4 2.83-7.6 7.6-.07 1.5-.09 1.9-.09 5.6s.02 4.1.08 5.6c.22 4.8 2.83 7.4 7.6 7.6 1.5.07 1.9.09 5.6.09s4.1-.02 5.6-.08c4.8-.22 7.4-2.83 7.6-7.6.07-1.5.09-1.9.09-5.6s-.02-4.1-.08-5.6c-.22-4.8-2.83-7.4-7.6-7.6-1.5-.07-1.9-.09-5.6-.09z" />
+                      <path d="M16 9.3c-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7-3-6.7-6.7-6.7zm0 10.7c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
+                      <circle cx="23" cy="9" r="1.6" />
+                    </svg>
+                  ),
+                  centerLogo: (
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        background: "linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
+                        border: "2.5px solid #ffffff",
+                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <svg viewBox="0 0 32 32" width="18" height="18" fill="#ffffff">
+                        <path d="M16 4.9c3.6 0 4 .02 5.4.08 3.5.16 5.1 1.74 5.2 5.2.06 1.4.08 1.8.08 5.4s-.02 4-.08 5.4c-.16 3.5-1.74 5.1-5.2 5.2-1.4.06-1.8.08-5.4.08s-4-.02-5.4-.08c-3.5-.16-5.1-1.74-5.2-5.2-.06-1.4-.08-1.8-.08-5.4s.02-4 .08-5.4c.16-3.5 1.74-5.1 5.2-5.2 1.4-.06 1.8-.08 5.4-.08m0-2.9c-3.7 0-4.1.02-5.6.08-4.8.22-7.4 2.83-7.6 7.6-.07 1.5-.09 1.9-.09 5.6s.02 4.1.08 5.6c.22 4.8 2.83 7.4 7.6 7.6 1.5.07 1.9.09 5.6.09s4.1-.02 5.6-.08c4.8-.22 7.4-2.83 7.6-7.6.07-1.5.09-1.9.09-5.6s-.02-4.1-.08-5.6c-.22-4.8-2.83-7.4-7.6-7.6-1.5-.07-1.9-.09-5.6-.09z" />
+                        <path d="M16 9.3c-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7-3-6.7-6.7-6.7zm0 10.7c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
+                        <circle cx="23" cy="9" r="1.6" />
+                      </svg>
+                    </div>
+                  ),
+                }
+              : {
+                  cardBg:
+                    "linear-gradient(155deg, rgba(6, 78, 59, 0.4) 0%, rgba(13, 148, 136, 0.2) 45%, rgba(6, 20, 25, 0.9) 100%)",
+                  cardBorder: "rgba(16, 185, 129, 0.4)",
+                  cardGlow: "rgba(16, 185, 129, 0.2)",
+                  badgeBg: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
+                  badgeShadow: "0 4px 14px rgba(5, 150, 105, 0.4)",
+                  cornerColor: "#10b981",
+                  btnBg: "linear-gradient(90deg, #059669 0%, #10b981 100%)",
+                  btnShadow: "0 4px 16px rgba(16, 185, 129, 0.35)",
+                  title: qr.label.toUpperCase(),
+                  subtitle: qr.caption || "Scan with phone camera",
+                  chip: "SCAN",
+                  chipColor: "#10b981",
+                  ctaText: "Point Camera to Scan",
+                  fallbackImg: undefined,
+                  logoSvg: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5">
+                      <rect width="18" height="18" x="3" y="3" rx="2" />
+                      <path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01" />
+                    </svg>
+                  ),
+                  centerLogo: undefined,
+                };
+
+            return (
               <div
+                key={qr.id}
                 style={{
-                  fontSize: 16,
-                  color: "#cbd5e1",
-                  marginTop: 4,
-                  textAlign: "center",
-                  lineHeight: 1.2,
+                  width: "100%",
+                  borderRadius: 22,
+                  background: theme.cardBg,
+                  border: `1.5px solid ${theme.cardBorder}`,
+                  boxShadow: `0 14px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 22px ${theme.cardGlow}`,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  padding: "12px 14px 10px",
+                  position: "relative",
+                  backdropFilter: "blur(14px)",
                 }}
               >
-                {qr.caption}
+                {/* 1. Card Header with Big Authentic App Logo & Details */}
+                <div
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 10,
+                  }}
+                >
+                  {/* Big Authentic Logo Icon Badge */}
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: isInstagram ? 12 : "50%",
+                      background: theme.badgeBg,
+                      boxShadow: theme.badgeShadow,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {theme.logoSvg}
+                  </div>
+
+                  {/* Header Title & Subtext */}
+                  <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 900,
+                        color: "#ffffff",
+                        letterSpacing: 0.8,
+                        lineHeight: 1.15,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {theme.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: isWhatsApp ? "#86efac" : isInstagram ? "#f9a8d4" : "#cbd5e1",
+                        fontWeight: 700,
+                        lineHeight: 1.2,
+                        marginTop: 2,
+                      }}
+                    >
+                      {theme.subtitle}
+                    </div>
+                  </div>
+
+                  {/* Top-Right Action Chip */}
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      color: "#ffffff",
+                      backgroundColor: "rgba(0, 0, 0, 0.4)",
+                      border: `1px solid ${theme.chipColor}`,
+                      padding: "3px 8px",
+                      borderRadius: 10,
+                      letterSpacing: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        backgroundColor: theme.chipColor,
+                        display: "inline-block",
+                      }}
+                    />
+                    {theme.chip}
+                  </div>
+                </div>
+
+                {/* 2. QR Code Frame with Camera Viewfinder Brackets & Center Logo */}
+                <div
+                  style={{
+                    position: "relative",
+                    width: 172,
+                    height: 172,
+                    padding: 8,
+                    backgroundColor: "#ffffff",
+                    borderRadius: 18,
+                    boxShadow: "0 10px 26px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.08)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {/* Viewfinder Top-Left Bracket */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: -4,
+                      left: -4,
+                      width: 20,
+                      height: 20,
+                      borderTop: `3.5px solid ${theme.cornerColor}`,
+                      borderLeft: `3.5px solid ${theme.cornerColor}`,
+                      borderTopLeftRadius: 8,
+                    }}
+                  />
+                  {/* Viewfinder Top-Right Bracket */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: -4,
+                      right: -4,
+                      width: 20,
+                      height: 20,
+                      borderTop: `3.5px solid ${theme.cornerColor}`,
+                      borderRight: `3.5px solid ${theme.cornerColor}`,
+                      borderTopRightRadius: 8,
+                    }}
+                  />
+                  {/* Viewfinder Bottom-Left Bracket */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: -4,
+                      left: -4,
+                      width: 20,
+                      height: 20,
+                      borderBottom: `3.5px solid ${theme.cornerColor}`,
+                      borderLeft: `3.5px solid ${theme.cornerColor}`,
+                      borderBottomLeftRadius: 8,
+                    }}
+                  />
+                  {/* Viewfinder Bottom-Right Bracket */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: -4,
+                      right: -4,
+                      width: 20,
+                      height: 20,
+                      borderBottom: `3.5px solid ${theme.cornerColor}`,
+                      borderRight: `3.5px solid ${theme.cornerColor}`,
+                      borderBottomRightRadius: 8,
+                    }}
+                  />
+
+                  {/* QR SVG Render / Fallback Image */}
+                  {qrSvgMap[qr.id] ? (
+                    <div
+                      className="tv-qr-container"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      dangerouslySetInnerHTML={{ __html: qrSvgMap[qr.id] }}
+                    />
+                  ) : theme.fallbackImg ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={theme.fallbackImg}
+                      alt={qr.label}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        height: "100%",
+                        fontSize: 12,
+                        color: "#64748b",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Loading QR...
+                    </div>
+                  )}
+
+                  {/* Centered Brand Watermark Badge Inside QR Code */}
+                  {theme.centerLogo && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        zIndex: 5,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {theme.centerLogo}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Irresistible Call-To-Action Button Pill */}
+                <div
+                  style={{
+                    width: "100%",
+                    marginTop: 10,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 3,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      padding: "6px 12px",
+                      borderRadius: 14,
+                      background: theme.btnBg,
+                      boxShadow: theme.btnShadow,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      color: "#ffffff",
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>📷</span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 900,
+                        letterSpacing: 0.8,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {theme.ctaText}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#cbd5e1",
+                      fontWeight: 600,
+                      lineHeight: 1.1,
+                      textAlign: "center",
+                    }}
+                  >
+                    Open phone camera to scan instantly
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+            );
+          })}
+        </div>
       </div>
 
       {/* ============================================================ */}
@@ -939,6 +1695,16 @@ export default function TvPlayerPage() {
                 0% { transform: translateX(100%); }
                 100% { transform: translateX(-100%); }
               }
+              @keyframes pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.4; transform: scale(0.85); }
+              }
+              .tv-qr-container svg {
+                width: 100% !important;
+                height: 100% !important;
+                display: block;
+                border-radius: 6px;
+              }
             `}</style>
             <div
               style={{
@@ -1038,6 +1804,13 @@ export default function TvPlayerPage() {
           setAutoplayBlocked(false);
         }}
         onPause={() => setIsAudioPlaying(false)}
+      />
+
+      {/* Dedicated Announcement Player for Zero-Collision & Natural Voice */}
+      <audio
+        ref={announcementAudioRef}
+        preload="auto"
+        style={{ display: "none" }}
       />
     </div>
   );

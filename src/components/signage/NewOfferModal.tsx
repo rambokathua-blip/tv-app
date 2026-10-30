@@ -120,25 +120,24 @@ export default function NewOfferModal({
             const uploadData = await uploadRes.json();
             finalMediaId =
               uploadData.public_url ||
-              uploadData.media?.storage_path ||
               uploadData.storage_path ||
+              uploadData.media?.storage_path ||
               uploadData.media?.id ||
               null;
           }
         } catch (uploadErr) {
           console.warn("Upload fallback to local URL", uploadErr);
         }
-      }
 
-      // If no mediaId from upload (or upload failed), convert the selected file to a base64 Data URL
-      if ((!finalMediaId || finalMediaId.startsWith("blob:")) && imageFile) {
-        finalMediaId = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => resolve(imageUrl || "");
-          reader.readAsDataURL(imageFile);
-        });
-      } else if (!finalMediaId && imageUrl) {
+        if (!finalMediaId || finalMediaId.startsWith("blob:")) {
+          finalMediaId = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(imageFile);
+          });
+        }
+      } else if (imageUrl && !imageUrl.startsWith("blob:")) {
         finalMediaId = imageUrl;
       }
 
@@ -167,13 +166,13 @@ export default function NewOfferModal({
       const promotionId = promoData.promotion?.id || promoData.id || promoData.data?.id;
 
       if (promotionId) {
-        // Add to default playlist
+        // Add to default playlist at position 1 (top of rotation)
         await fetch("/api/signage/admin/playlist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             promotion_id: promotionId,
-            position: 999,
+            position: 1,
           }),
         }).catch(() => {});
       }

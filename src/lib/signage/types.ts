@@ -160,4 +160,12 @@ export interface SignageManifest {
     volume: number;
     loop: boolean;
   };
+  active_announcement?: {
+    id: string;
+    text: string;
+    lang: "hi-IN" | "en-IN";
+    audio_url?: string | null;
+    created_at: string;
+    volume?: number;
+  } | null;
 }

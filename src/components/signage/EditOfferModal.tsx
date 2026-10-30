@@ -26,9 +26,10 @@ export default function EditOfferModal({
   onUpdated,
 }: EditOfferModalProps) {
   const initialThumb =
+    promo.media_id ||
     promo.media?.thumb_path ||
     promo.media?.storage_path ||
-    "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop";
+    "/kathua-fresh-logo.jpg";
 
   const [title, setTitle] = useState(promo.title);
   const [priceText, setPriceText] = useState(promo.price_text || "");
@@ -88,24 +89,24 @@ export default function EditOfferModal({
             const uploadData = await uploadRes.json();
             finalMediaId =
               uploadData.public_url ||
-              uploadData.media?.storage_path ||
               uploadData.storage_path ||
+              uploadData.media?.storage_path ||
               uploadData.media?.id ||
               null;
           }
         } catch (uploadErr) {
           console.warn("Upload fallback", uploadErr);
         }
-      }
 
-      if ((!finalMediaId || finalMediaId.startsWith("blob:")) && imageFile) {
-        finalMediaId = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => resolve(imageUrl || "");
-          reader.readAsDataURL(imageFile);
-        });
-      } else if (imageUrl !== initialThumb) {
+        if (!finalMediaId || finalMediaId.startsWith("blob:")) {
+          finalMediaId = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(imageUrl || "");
+            reader.readAsDataURL(imageFile);
+          });
+        }
+      } else if (imageUrl && imageUrl !== initialThumb && !imageUrl.startsWith("blob:")) {
         finalMediaId = imageUrl;
       }
 
