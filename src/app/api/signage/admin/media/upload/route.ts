@@ -7,11 +7,11 @@ import {
 import { devStore } from "@/lib/signage/dev-store";
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin();
-  if (auth.error) return auth.error;
+  try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
 
-  const admin = createAdminClient();
-  const formData = await request.formData();
+    const formData = await request.formData();
   const file = formData.get("file") as File | null;
 
   if (!file) {
@@ -53,37 +53,42 @@ export async function POST(request: Request) {
   const ext = mime === "image/jpeg" ? "jpg" : mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "mp3";
   const storagePath = `${kind}s/${crypto.randomUUID()}.${ext}`;
 
-  // Upload to Supabase Storage
-  const { error: uploadError } = await admin.storage
-    .from("signage-media")
-    .upload(storagePath, arrayBuffer, {
-      contentType: mime,
-      upsert: false,
-    });
-
+  let finalMedia = null;
   const width: number | null = null;
   const height: number | null = null;
-  let finalMedia = null;
 
-  if (!uploadError) {
-    const { data: media, error: dbError } = await admin
-      .from("signage_media")
-      .insert({
-        kind,
-        storage_path: storagePath,
-        mime,
-        bytes: file.size,
-        width,
-        height,
-        sha256,
-        created_by: auth.claims.sub,
-      })
-      .select()
-      .single();
+  try {
+    const admin = createAdminClient();
+    // Upload to Supabase Storage
+    const { error: uploadError } = await admin.storage
+      .from("signage-media")
+      .upload(storagePath, arrayBuffer, {
+        contentType: mime,
+        upsert: false,
+      });
 
-    if (!dbError && media) {
-      finalMedia = media;
+    if (!uploadError) {
+      const { data: media, error: dbError } = await admin
+        .from("signage_media")
+        .insert({
+          kind,
+          storage_path: storagePath,
+          mime,
+          bytes: file.size,
+          width,
+          height,
+          sha256,
+          created_by: auth.claims.sub,
+        })
+        .select()
+        .single();
+
+      if (!dbError && media) {
+        finalMedia = media;
+      }
     }
+  } catch {
+    // Supabase storage bucket or table unmigrated
   }
 
   if (!finalMedia) {
@@ -104,6 +109,7 @@ export async function POST(request: Request) {
         created_at: new Date().toISOString(),
         thumb_path: dataUri,
       };
+      if (!devStore.mediaMap) devStore.mediaMap = {};
       devStore.mediaMap[mediaId] = dataUri;
       return successResponse({
         media: finalMedia,
@@ -113,7 +119,7 @@ export async function POST(request: Request) {
       }, 201);
     }
 
-    return errorResponse("UPLOAD_ERROR", uploadError?.message || "Storage error", 500);
+    return errorResponse("UPLOAD_ERROR", "Failed to upload to storage", 500);
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -124,6 +130,10 @@ export async function POST(request: Request) {
     ...finalMedia,
     public_url: publicUrl,
   }, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return errorResponse("SERVER_ERROR", msg, 500);
+  }
 }
 
 /**

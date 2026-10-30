@@ -96,6 +96,15 @@ export default function EditOfferModal({
         } catch (uploadErr) {
           console.warn("Upload fallback", uploadErr);
         }
+      }
+
+      if ((!finalMediaId || finalMediaId.startsWith("blob:")) && imageFile) {
+        finalMediaId = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(imageUrl || "");
+          reader.readAsDataURL(imageFile);
+        });
       } else if (imageUrl !== initialThumb) {
         finalMediaId = imageUrl;
       }

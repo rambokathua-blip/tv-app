@@ -130,8 +130,15 @@ export default function NewOfferModal({
         }
       }
 
-      // If no mediaId from upload, use imageUrl
-      if (!finalMediaId && imageUrl) {
+      // If no mediaId from upload (or upload failed), convert the selected file to a base64 Data URL
+      if ((!finalMediaId || finalMediaId.startsWith("blob:")) && imageFile) {
+        finalMediaId = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(imageUrl || "");
+          reader.readAsDataURL(imageFile);
+        });
+      } else if (!finalMediaId && imageUrl) {
         finalMediaId = imageUrl;
       }
 

@@ -6,10 +6,19 @@ import { devStore } from "@/lib/signage/dev-store";
  * Return current store background audio settings
  */
 export async function GET() {
-  const auth = await requireAdmin();
-  if (auth.error) return auth.error;
-
-  return successResponse(devStore.audioSettings);
+  try {
+    const auth = await requireAdmin();
+    if (auth?.error) return auth.error;
+    return successResponse(devStore.audioSettings);
+  } catch (err: unknown) {
+    const defaultSettings = devStore?.audioSettings || {
+      enabled: true,
+      url: "/store-audio.mp3",
+      volume: 80,
+      loop: true,
+    };
+    return successResponse(defaultSettings);
+  }
 }
 
 /**
