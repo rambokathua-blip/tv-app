@@ -9,6 +9,13 @@ import {
   Sliders,
 } from "lucide-react";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Kathua Fresh TV",
+  description: "Smart Digital Signage Platform for Kathua Fresh Store TV",
+};
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans selection:bg-emerald-500 selection:text-white">
