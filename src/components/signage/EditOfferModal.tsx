@@ -87,7 +87,11 @@ export default function EditOfferModal({
           if (uploadRes.ok) {
             const uploadData = await uploadRes.json();
             finalMediaId =
-              uploadData.media?.id || uploadData.media?.storage_path || null;
+              uploadData.public_url ||
+              uploadData.media?.storage_path ||
+              uploadData.storage_path ||
+              uploadData.media?.id ||
+              null;
           }
         } catch (uploadErr) {
           console.warn("Upload fallback", uploadErr);

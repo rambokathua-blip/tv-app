@@ -103,6 +103,8 @@ class DevStore {
     },
   ];
 
+  mediaMap: Record<string, string> = {};
+
   audioSettings = {
     enabled: true,
     url: "/store-audio.mp3",
@@ -123,9 +125,30 @@ class DevStore {
 
   addPromotion(promo: Omit<Promotion, "id" | "created_at" | "updated_at">): Promotion {
     const id = "promo-" + Date.now();
+    let media = promo.media;
+    if (promo.media_id) {
+      const resolvedPath =
+        this.mediaMap[promo.media_id] ||
+        (promo.media_id.startsWith("data:") || promo.media_id.startsWith("http") || promo.media_id.startsWith("/")
+          ? promo.media_id
+          : "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop");
+
+      media = {
+        id: promo.media_id,
+        kind: "image",
+        storage_path: resolvedPath,
+        mime: "image/jpeg",
+        bytes: 200000,
+        sha256: "dev-hash",
+        created_at: new Date().toISOString(),
+        thumb_path: resolvedPath,
+      };
+    }
+
     const newPromo: Promotion = {
       ...promo,
       id,
+      media,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -141,6 +164,7 @@ class DevStore {
       promotion: newPromo,
     });
 
+    this.publish();
     return newPromo;
   }
 
@@ -152,6 +176,27 @@ class DevStore {
           item.promotion ||
           this.promotions.find((p) => p.id === item.promotion_id);
         if (!promo || !promo.enabled) return null;
+
+        let imgUrl =
+          promo.media?.storage_path && promo.media.storage_path !== "demo"
+            ? promo.media.storage_path
+            : promo.media?.thumb_path || "";
+
+        if (imgUrl && this.mediaMap[imgUrl]) {
+          imgUrl = this.mediaMap[imgUrl];
+        }
+
+        if (
+          !imgUrl ||
+          (!imgUrl.startsWith("http") &&
+            !imgUrl.startsWith("data:") &&
+            !imgUrl.startsWith("/"))
+        ) {
+          imgUrl =
+            this.mediaMap[imgUrl] ||
+            "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop";
+        }
+
         return {
           id: promo.id,
           promotion_id: promo.id,
@@ -159,11 +204,7 @@ class DevStore {
           price_text: promo.price_text,
           duration_sec:
             item.duration_override_sec || promo.duration_sec || 10,
-          image_url:
-            promo.media?.storage_path && promo.media.storage_path !== "demo"
-              ? promo.media.storage_path
-              : promo.media?.thumb_path ||
-                "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop",
+          image_url: imgUrl,
         };
       })
       .filter(Boolean);

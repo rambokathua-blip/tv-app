@@ -70,11 +70,36 @@ export async function PATCH(
 
   const index = devStore.promotions.findIndex((p) => p.id === id);
   if (index >= 0) {
+    let media = devStore.promotions[index].media;
+    if (parsed.data.media_id) {
+      const resolvedPath =
+        devStore.mediaMap[parsed.data.media_id] ||
+        (parsed.data.media_id.startsWith("data:") ||
+        parsed.data.media_id.startsWith("http") ||
+        parsed.data.media_id.startsWith("/")
+          ? parsed.data.media_id
+          : "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1920&auto=format&fit=crop");
+
+      media = {
+        id: parsed.data.media_id,
+        kind: "image",
+        storage_path: resolvedPath,
+        mime: "image/jpeg",
+        bytes: 200000,
+        sha256: "dev-hash",
+        created_at: new Date().toISOString(),
+        thumb_path: resolvedPath,
+      };
+    }
+
     devStore.promotions[index] = {
       ...devStore.promotions[index],
       ...parsed.data,
+      media,
       updated_at: new Date().toISOString(),
     } as any;
+
+    devStore.publish();
     return successResponse(devStore.promotions[index]);
   }
 

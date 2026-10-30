@@ -4,6 +4,7 @@ import {
   successResponse,
   errorResponse,
 } from "@/lib/signage/api-utils";
+import { devStore } from "@/lib/signage/dev-store";
 
 export async function POST(request: Request) {
   const auth = await requireAdmin();
@@ -90,8 +91,9 @@ export async function POST(request: Request) {
     if (process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_ADMIN !== "false") {
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       const dataUri = `data:${mime};base64,${base64}`;
+      const mediaId = "media-" + crypto.randomUUID();
       finalMedia = {
-        id: "media-" + crypto.randomUUID(),
+        id: mediaId,
         kind,
         storage_path: dataUri,
         mime,
@@ -102,7 +104,13 @@ export async function POST(request: Request) {
         created_at: new Date().toISOString(),
         thumb_path: dataUri,
       };
-      return successResponse({ media: finalMedia }, 201);
+      devStore.mediaMap[mediaId] = dataUri;
+      return successResponse({
+        media: finalMedia,
+        ...finalMedia,
+        public_url: dataUri,
+        storage_path: dataUri,
+      }, 201);
     }
 
     return errorResponse("UPLOAD_ERROR", uploadError?.message || "Storage error", 500);
