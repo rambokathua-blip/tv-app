@@ -15,9 +15,12 @@ export default function Home() {
       {/* Hero Header */}
       <header className="px-6 py-6 border-b border-slate-800/80 flex items-center justify-between max-w-5xl mx-auto w-full">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-lg shadow-lg shadow-emerald-500/20">
-            KF
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/kathua-fresh-logo.jpg"
+            alt="Kathua Fresh Logo"
+            className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-emerald-500/25 border border-emerald-500/30"
+          />
           <div>
             <div className="text-base font-extrabold tracking-tight text-white leading-none">
               Kathua Fresh

@@ -38,9 +38,12 @@ export default function AdminSignageLayout({
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-base shadow-lg shadow-emerald-500/20">
-            KF
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/kathua-fresh-logo.jpg"
+            alt="Kathua Fresh Logo"
+            className="w-10 h-10 rounded-xl object-cover shadow-md shadow-emerald-500/20 border border-emerald-500/30"
+          />
           <div>
             <h1 className="text-base font-bold tracking-tight text-white leading-none">
               Kathua Fresh TV

@@ -9,10 +9,11 @@ const FALLBACK_MANIFEST: SignageManifest = {
   version: 1,
   generated_at: "2026-10-30T00:00:00.000Z",
   branding: {
+    logo_url: "/kathua-fresh-logo.jpg",
     website_text: "www.kathuafresh.in",
-    tagline: "Always Pure, Always Fresh",
+    tagline: "Quality Assured | Always Fresh",
     ticker_text:
-      "Welcome to Kathua Fresh • Fresh Farm Fruits & Vegetables Daily • 100% Quality Guaranteed • Scan QR Code to Join WhatsApp Channel for Daily Special Offers",
+      "Welcome to Kathua Fresh • Quality Assured | Always Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Guaranteed • Scan WhatsApp QR for Daily Mandi Rates",
     ticker_enabled: true,
     layout_profile: "standard",
   },
@@ -382,24 +383,21 @@ export default function TvPlayerPage() {
           textAlign: "center",
         }}
       >
-        <div style={{ position: "absolute", top: 40, left: 60, display: "flex", alignItems: "center", gap: 16 }}>
-          <div
+        <div style={{ position: "absolute", top: 40, left: 60, display: "flex", alignItems: "center", gap: 18 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/kathua-fresh-logo.jpg"
+            alt="Kathua Fresh Logo"
             style={{
-              width: 50,
-              height: 50,
-              borderRadius: "50%",
-              backgroundColor: "#22c55e",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 800,
-              fontSize: 24,
-              color: "#064e3b",
+              width: 60,
+              height: 60,
+              borderRadius: 16,
+              objectFit: "cover",
+              boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
+              border: "1px solid rgba(255,255,255,0.2)",
             }}
-          >
-            KF
-          </div>
-          <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: "0.05em" }}>
+          />
+          <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "0.05em" }}>
             KATHUA FRESH TV
           </span>
         </div>
@@ -644,34 +642,24 @@ export default function TvPlayerPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 16,
-          padding: "0 24px",
+          padding: "10px 16px",
           borderBottom: "2px solid rgba(255, 255, 255, 0.1)",
           boxShadow: "-10px 0 25px rgba(0,0,0,0.4)",
+          overflow: "hidden",
         }}
       >
-        <div
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={manifest.branding?.logo_url || "/kathua-fresh-logo.jpg"}
+          alt="Kathua Fresh Logo"
           style={{
-            width: 72,
-            height: 72,
-            borderRadius: 20,
-            backgroundColor: "#22c55e",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+            maxHeight: 130,
+            maxWidth: 390,
+            borderRadius: 14,
+            objectFit: "contain",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
           }}
-        >
-          <span style={{ fontSize: 36, fontWeight: 900, color: "#064e3b" }}>KF</span>
-        </div>
-        <div>
-          <div style={{ fontSize: 32, fontWeight: 900, letterSpacing: "0.04em", color: "#ffffff", lineHeight: 1.1 }}>
-            KATHUA FRESH
-          </div>
-          <div style={{ fontSize: 16, color: "#86efac", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            {manifest.branding?.tagline || "Farm Fresh Daily"}
-          </div>
-        </div>
+        />
       </div>
 
       {/* ============================================================ */}

@@ -12,7 +12,7 @@ import {
 
 export default function BrandingSettingsPage() {
   const [websiteText, setWebsiteText] = useState("www.kathuafresh.in");
-  const [tagline, setTagline] = useState("Always Pure, Always Fresh");
+  const [tagline, setTagline] = useState("Quality Assured | Always Fresh");
   const [tickerText, setTickerText] = useState(
     "Welcome to Kathua Fresh • Fresh Farm Fruits & Vegetables Daily • 100% Quality Guaranteed • Scan QR Code to Join WhatsApp Channel for Daily Special Offers"
   );
@@ -119,7 +119,24 @@ export default function BrandingSettingsPage() {
         {/* Website & Tagline */}
         <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-3.5">
           <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Brand Identity
+            Brand Identity & Logo
+          </div>
+
+          <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl flex items-center gap-3.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/kathua-fresh-logo.jpg"
+              alt="Official Logo"
+              className="w-16 h-16 rounded-xl object-contain bg-emerald-950 border border-emerald-500/30 shrink-0"
+            />
+            <div>
+              <div className="text-xs font-bold text-white">
+                Official Kathua Fresh Brand Logo
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Permanently featured in Zone B of the 1920x1080 Smart TV screen
+              </p>
+            </div>
           </div>
 
           <div>
