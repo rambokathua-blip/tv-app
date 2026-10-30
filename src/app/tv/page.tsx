@@ -2,6 +2,19 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import QRCode from "qrcode";
+import {
+  MoreVertical,
+  Smartphone,
+  ShieldCheck,
+  Maximize2,
+  RefreshCw,
+  LogOut,
+  X,
+  ExternalLink,
+  Volume2,
+  VolumeX,
+  Tv,
+} from "lucide-react";
 import type { SignageManifest, ManifestSlide } from "@/lib/signage/types";
 
 // Fallback demo manifest for preview or cold start before any network fetch
@@ -93,6 +106,8 @@ export default function TvPlayerPage() {
   const [slideProgress, setSlideProgress] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [windowScale, setWindowScale] = useState(1);
 
@@ -1902,6 +1917,426 @@ export default function TvPlayerPage() {
         style={{ display: "none" }}
       />
       </div>
+
+      {/* ============================================================ */}
+      {/* FLOATING 3-DOT QUICK ACTION MENU (ADMIN & PHONE CONNECT)     */}
+      {/* ============================================================ */}
+      <div
+        style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 10000,
+        }}
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowQuickMenu(!showQuickMenu);
+          }}
+          title="TV Settings, Connect Phone & Admin Mode"
+          style={{
+            width: 46,
+            height: 46,
+            borderRadius: "50%",
+            backgroundColor: showQuickMenu ? "#22c55e" : "rgba(15, 23, 42, 0.8)",
+            color: showQuickMenu ? "#022c22" : "#ffffff",
+            border: "1.5px solid rgba(255, 255, 255, 0.2)",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.6)",
+            backdropFilter: "blur(12px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            outline: "none",
+          }}
+        >
+          {showQuickMenu ? <X size={22} /> : <MoreVertical size={22} />}
+        </button>
+
+        {/* Quick Menu Flyout Popup */}
+        {showQuickMenu && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: 56,
+              right: 0,
+              width: 310,
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              border: "1px solid rgba(34, 197, 94, 0.35)",
+              borderRadius: 24,
+              boxShadow: "0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(34, 197, 94, 0.2)",
+              backdropFilter: "blur(20px)",
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              color: "#fff",
+              fontFamily: "system-ui, -apple-system, sans-serif",
+              animation: "fadeIn 0.15s ease-out",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#fff", letterSpacing: "0.02em" }}>
+                  Kathua Fresh TV
+                </div>
+                <div style={{ fontSize: 11, color: "#86efac", fontWeight: 600 }}>
+                  Device & Control Hub
+                </div>
+              </div>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, backgroundColor: "rgba(34, 197, 94, 0.2)", color: "#4ade80", fontWeight: 700 }}>
+                {token ? "PAIRED" : "PREVIEW"}
+              </span>
+            </div>
+
+            {/* Action 1: Connect Phone */}
+            <button
+              onClick={() => {
+                setShowQuickMenu(false);
+                startPairing();
+                setShowConnectModal(true);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 14px",
+                borderRadius: 16,
+                backgroundColor: "rgba(34, 197, 94, 0.14)",
+                border: "1px solid rgba(34, 197, 94, 0.35)",
+                color: "#86efac",
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <Smartphone size={20} style={{ flexShrink: 0, color: "#4ade80" }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
+                  Connect Phone / Pair TV
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
+                  Show QR code & 6-char pairing code
+                </div>
+              </div>
+            </button>
+
+            {/* Action 2: Switch to Admin Mode */}
+            <a
+              href="/admin/signage"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 14px",
+                borderRadius: 16,
+                backgroundColor: "rgba(255, 255, 255, 0.06)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                color: "#ffffff",
+                textDecoration: "none",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <ShieldCheck size={20} style={{ flexShrink: 0, color: "#38bdf8" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
+                  Switch to Admin Mode
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
+                  Manage slides, voice & TV settings
+                </div>
+              </div>
+              <ExternalLink size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
+            </a>
+
+            {/* Action 3: TV Devices Management */}
+            <a
+              href="/admin/signage/more/devices"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                borderRadius: 14,
+                backgroundColor: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                color: "#ffffff",
+                textDecoration: "none",
+                cursor: "pointer",
+              }}
+            >
+              <Tv size={18} style={{ flexShrink: 0, color: "#a78bfa" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Manage TV Devices</div>
+              </div>
+              <ExternalLink size={12} style={{ color: "rgba(255,255,255,0.3)" }} />
+            </a>
+
+            {/* Action 4: Toggle Fullscreen */}
+            <button
+              onClick={() => {
+                toggleFullScreen();
+                setShowQuickMenu(false);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                borderRadius: 14,
+                backgroundColor: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                color: "#ffffff",
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <Maximize2 size={18} style={{ flexShrink: 0, color: "#facc15" }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Toggle Fullscreen</div>
+              </div>
+            </button>
+
+            {/* Action 5: Audio Toggle */}
+            <button
+              onClick={() => {
+                setIsAudioMuted(!isAudioMuted);
+                if (audioRef.current) {
+                  audioRef.current.muted = !isAudioMuted;
+                }
+                setShowQuickMenu(false);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                borderRadius: 14,
+                backgroundColor: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                color: "#ffffff",
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              {isAudioMuted ? (
+                <VolumeX size={18} style={{ flexShrink: 0, color: "#f87171" }} />
+              ) : (
+                <Volume2 size={18} style={{ flexShrink: 0, color: "#4ade80" }} />
+              )}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>
+                  {isAudioMuted ? "Unmute Background Music" : "Mute Background Music"}
+                </div>
+              </div>
+            </button>
+
+            {/* Action 6: Unpair TV (if paired) */}
+            {token && (
+              <button
+                onClick={() => {
+                  if (confirm("Are you sure you want to unpair this TV?")) {
+                    localStorage.removeItem("signage_device_token");
+                    setToken(null);
+                    setShowQuickMenu(false);
+                    startPairing();
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 14px",
+                  borderRadius: 14,
+                  backgroundColor: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  color: "#fca5a5",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                  marginTop: 4,
+                }}
+              >
+                <LogOut size={16} style={{ flexShrink: 0, color: "#ef4444" }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>
+                    Unpair TV Screen
+                  </div>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ============================================================ */}
+      {/* PHONE CONNECT / PAIRING POPUP MODAL                          */}
+      {/* ============================================================ */}
+      {showConnectModal && (
+        <div
+          onClick={() => setShowConnectModal(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.85)",
+            backdropFilter: "blur(16px)",
+            zIndex: 10002,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            fontFamily: "system-ui, -apple-system, sans-serif",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: "#06281e",
+              border: "2px solid rgba(34, 197, 94, 0.4)",
+              borderRadius: 32,
+              padding: "36px 44px",
+              maxWidth: 620,
+              width: "100%",
+              boxShadow: "0 25px 70px rgba(0, 0, 0, 0.9), 0 0 40px rgba(34, 197, 94, 0.3)",
+              color: "#ffffff",
+              textAlign: "center",
+              position: "relative",
+            }}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setShowConnectModal(false)}
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                border: "none",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ fontSize: 13, color: "#86efac", textTransform: "uppercase", letterSpacing: 3, fontWeight: 700 }}>
+              Kathua Fresh TV Hub
+            </div>
+            <h2 style={{ fontSize: 32, fontWeight: 800, margin: "10px 0 24px 0", color: "#ffffff" }}>
+              Connect Phone to TV
+            </h2>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32, margin: "24px 0" }}>
+              {/* QR Code */}
+              <div
+                style={{
+                  backgroundColor: "#ffffff",
+                  padding: 12,
+                  borderRadius: 20,
+                  width: 190,
+                  height: 190,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={
+                    pairingQrSvg ||
+                    `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+                      typeof window !== "undefined"
+                        ? `${window.location.origin}/admin/signage/more/devices?code=${pairingCode}`
+                        : ""
+                    )}`
+                  }
+                  alt="Scan to Pair"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                />
+              </div>
+
+              {/* 6-char Code Display */}
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: 14, color: "rgba(255, 255, 255, 0.7)", marginBottom: 8 }}>
+                  Scan QR or enter code in Admin:
+                </div>
+                <div
+                  style={{
+                    fontSize: 48,
+                    fontWeight: 900,
+                    letterSpacing: 6,
+                    color: "#4ade80",
+                    fontFamily: "monospace",
+                    background: "rgba(0,0,0,0.4)",
+                    padding: "8px 20px",
+                    borderRadius: 16,
+                    border: "2px solid #22c55e",
+                    display: "inline-block",
+                  }}
+                >
+                  {pairingCode || "......"}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 14, color: "#cbd5e1" }}>
+                  Code expires in: <strong style={{ color: "#facc15" }}>{expiresIn}s</strong>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
+              <a
+                href={`/admin/signage/more/devices?code=${pairingCode}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: 14,
+                  backgroundColor: "#22c55e",
+                  color: "#022c22",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <ExternalLink size={16} />
+                <span>Open Admin Pair Page</span>
+              </a>
+              <button
+                onClick={() => setShowConnectModal(false)}
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: 14,
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  color: "#ffffff",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                Close & Return to TV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
