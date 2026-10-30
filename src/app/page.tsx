@@ -1,69 +1,135 @@
-import Image from "next/image";
+import Link from "next/link";
+import {
+  Tv,
+  Smartphone,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
+  Sliders,
+} from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Hero Header */}
+      <header className="px-6 py-6 border-b border-slate-800/80 flex items-center justify-between max-w-5xl mx-auto w-full">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-lg shadow-lg shadow-emerald-500/20">
+            KF
+          </div>
+          <div>
+            <div className="text-base font-extrabold tracking-tight text-white leading-none">
+              Kathua Fresh
+            </div>
+            <div className="text-xs text-emerald-400 font-semibold mt-1">
+              Smart Digital Signage Platform
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs font-semibold text-slate-300">
+            System Ready
+          </span>
+        </div>
+      </header>
+
+      {/* Main Action Portal */}
+      <main className="max-w-4xl mx-auto px-6 py-12 flex-1 flex flex-col justify-center">
+        <div className="text-center space-y-4 mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Xiaomi MiTV-AXSO0 Compatible • Android 9</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white max-w-2xl mx-auto leading-tight">
+            Control Shop TV Offers in{" "}
+            <span className="text-emerald-400">Under 60 Seconds</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="text-sm sm:text-base text-slate-400 max-w-xl mx-auto leading-relaxed">
+            Upload daily farm-fresh prices and promotions from your phone.
+            Instant publish, permanent QR codes, voice announcements, and
+            fail-safe offline playback.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        {/* Action Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto w-full">
+          {/* Card 1: Mobile Admin PWA */}
+          <Link
+            href="/admin/signage"
+            className="group p-6 rounded-3xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all shadow-xl flex flex-col justify-between"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <h2 className="text-lg font-bold text-white group-hover:text-emerald-400 transition-colors">
+                Mobile Admin PWA
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Add new offers, adjust prices, reorder playlist, manage voice
+                announcements, and publish instantly.
+              </p>
+            </div>
+
+            <div className="pt-6 flex items-center gap-2 text-xs font-bold text-emerald-400 group-hover:translate-x-1 transition-transform">
+              <span>Open Admin Dashboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </Link>
+
+          {/* Card 2: TV Display Player */}
+          <Link
+            href="/tv"
             target="_blank"
-            rel="noopener noreferrer"
+            className="group p-6 rounded-3xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all shadow-xl flex flex-col justify-between"
           >
-            Documentation
-          </a>
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/20 group-hover:scale-110 transition-transform">
+                <Tv className="w-6 h-6" />
+              </div>
+              <h2 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">
+                TV Screen Player
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Dedicated 1920x1080 display screen for shop Smart TV. Shows
+                promotions, QR codes, and scrolling ticker.
+              </p>
+            </div>
+
+            <div className="pt-6 flex items-center gap-2 text-xs font-bold text-blue-400 group-hover:translate-x-1 transition-transform">
+              <span>Launch TV Display</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </Link>
+        </div>
+
+        {/* Feature Checkpoints */}
+        <div className="mt-12 max-w-2xl mx-auto w-full pt-8 border-t border-slate-900 flex flex-wrap items-center justify-around gap-4 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Zero impact on store database</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Works 100% offline</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Instant &lt;5s sync</span>
+          </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="px-6 py-4 border-t border-slate-900 text-center text-xs text-slate-500">
+        Kathua Fresh Smart Digital Signage System v1.0 • Built for Xiaomi
+        MiTV-AXSO0
+      </footer>
     </div>
   );
 }
