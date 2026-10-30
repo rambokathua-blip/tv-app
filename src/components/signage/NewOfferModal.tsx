@@ -19,6 +19,77 @@ interface NewOfferModalProps {
   onCreated: () => void;
 }
 
+async function compressClientImage(
+  file: File
+): Promise<{ file: File; dataUrl: string; isWide: boolean }> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      resolve({ file, dataUrl: url, isWide: true });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_WIDTH = 1920;
+        const MAX_HEIGHT = 1080;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+          const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          const url = URL.createObjectURL(file);
+          resolve({ file, dataUrl: url, isWide: true });
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        const ratio = img.width / img.height;
+        const isWide = ratio >= 1.6 && ratio <= 1.95;
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File(
+                [blob],
+                file.name.replace(/\.[^.]+$/, ".jpg"),
+                { type: "image/jpeg", lastModified: Date.now() }
+              );
+              resolve({ file: compressedFile, dataUrl, isWide });
+            } else {
+              resolve({ file, dataUrl, isWide });
+            }
+          },
+          "image/jpeg",
+          0.82
+        );
+      };
+      img.onerror = () => {
+        const url = URL.createObjectURL(file);
+        resolve({ file, dataUrl: url, isWide: true });
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      const url = URL.createObjectURL(file);
+      resolve({ file, dataUrl: url, isWide: true });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function NewOfferModal({
   isOpen,
   onClose,
@@ -44,27 +115,22 @@ export default function NewOfferModal({
 
   if (!isOpen) return null;
 
-  // Handle image selection & aspect ratio inspection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image selection & aspect ratio inspection with client compression
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setImageFile(file);
-    const objectUrl = URL.createObjectURL(file);
-    setImageUrl(objectUrl);
-
-    // Check image dimensions & aspect ratio
-    const img = new Image();
-    img.onload = () => {
-      const ratio = img.width / img.height;
-      // 16:9 is ~1.777. Warn if outside 1.6 to 1.95
-      if (ratio < 1.6 || ratio > 1.95) {
-        setAspectWarning(true);
-      } else {
-        setAspectWarning(false);
-      }
-    };
-    img.src = objectUrl;
+    try {
+      const { file: compressed, dataUrl, isWide } = await compressClientImage(file);
+      setImageFile(compressed);
+      setImageUrl(dataUrl);
+      setAspectWarning(!isWide);
+    } catch {
+      setImageFile(file);
+      setImageUrl(URL.createObjectURL(file));
+    } finally {
+      e.target.value = "";
+    }
   };
 
   // Sample quick images for testing / demo
@@ -101,6 +167,10 @@ export default function NewOfferModal({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async (publishImmediately: boolean) => {
+    if (!title.trim()) {
+      setSaveError("Please enter an offer title");
+      return;
+    }
     setIsPublishing(true);
     setSaveError(null);
     try {
@@ -130,28 +200,33 @@ export default function NewOfferModal({
         }
 
         if (!finalMediaId || finalMediaId.startsWith("blob:")) {
-          finalMediaId = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(imageFile);
-          });
+          finalMediaId = imageUrl;
         }
       } else if (imageUrl && !imageUrl.startsWith("blob:")) {
         finalMediaId = imageUrl;
       }
+
+      const formatIso = (val: string) => {
+        if (!val) return null;
+        try {
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? null : d.toISOString();
+        } catch {
+          return null;
+        }
+      };
 
       // Create promotion
       const promoRes = await fetch("/api/signage/admin/promotions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
-          price_text: priceText || null,
+          title: title.trim(),
+          price_text: priceText.trim() || null,
           media_id: finalMediaId,
           duration_sec: durationSec,
-          starts_at: startsAt ? new Date(startsAt).toISOString() : null,
-          ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+          starts_at: formatIso(startsAt),
+          ends_at: formatIso(endsAt),
           status: publishImmediately ? "live" : "draft",
           enabled: true,
         }),
@@ -159,7 +234,14 @@ export default function NewOfferModal({
 
       if (!promoRes.ok) {
         const errorData = await promoRes.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || "Failed to create promotion");
+        const msg =
+          typeof errorData.error === "string"
+            ? errorData.error
+            : errorData.error?.message ||
+              (promoRes.status === 413
+                ? "Image file is too large for upload. Please choose a smaller photo."
+                : `Failed to create promotion (Server error ${promoRes.status})`);
+        throw new Error(msg);
       }
 
       const promoData = await promoRes.json();
@@ -225,23 +307,6 @@ export default function NewOfferModal({
           {/* STEP 1: CHOOSE IMAGE */}
           {step === 1 && (
             <div className="space-y-4">
-              {/* Hidden file inputs for Gallery & Camera (sr-only preserves native touch events on mobile) */}
-              <input
-                id="new-offer-gallery-file"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/*"
-                className="sr-only"
-                onChange={handleFileChange}
-              />
-              <input
-                id="new-offer-camera-file"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="sr-only"
-                onChange={handleFileChange}
-              />
-
               {imageUrl ? (
                 <div className="space-y-3">
                   <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 group">
@@ -262,28 +327,35 @@ export default function NewOfferModal({
                         setImageFile(null);
                       }}
                       title="Remove image"
-                      className="absolute top-2 right-2 p-1.5 bg-black/75 hover:bg-red-600 rounded-full text-white transition-colors"
+                      className="absolute top-2 right-2 p-1.5 bg-black/75 hover:bg-red-600 rounded-full text-white transition-colors z-30"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
-                  {/* Explicit Mobile Change Picture Buttons */}
+                  {/* Explicit Mobile Change Picture Buttons with Direct Embedded Inputs */}
                   <div className="grid grid-cols-2 gap-2 pt-0.5">
-                    <label
-                      htmlFor="new-offer-gallery-file"
-                      className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center"
-                    >
+                    <div className="relative py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center overflow-hidden">
                       <Upload className="w-4 h-4 shrink-0" />
                       <span>Change Picture</span>
-                    </label>
-                    <label
-                      htmlFor="new-offer-camera-file"
-                      className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
-                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        onChange={handleFileChange}
+                      />
+                    </div>
+                    <div className="relative py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center overflow-hidden">
                       <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Take New Photo</span>
-                    </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        onChange={handleFileChange}
+                      />
+                    </div>
                   </div>
 
                   {aspectWarning && (
@@ -299,11 +371,14 @@ export default function NewOfferModal({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Native Label Trigger for Main Upload Area */}
-                  <label
-                    htmlFor="new-offer-gallery-file"
-                    className="border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 block shadow-inner"
-                  >
+                  {/* Direct Input Over Entire Dashed Box */}
+                  <div className="relative border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 shadow-inner overflow-hidden">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                      onChange={handleFileChange}
+                    />
                     <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3 mx-auto">
                       <Upload className="w-7 h-7" />
                     </div>
@@ -317,24 +392,31 @@ export default function NewOfferModal({
                       <ImageIcon className="w-3.5 h-3.5" />
                       <span>JPG, PNG, WebP</span>
                     </div>
-                  </label>
+                  </div>
 
-                  {/* Dual Action Buttons for Mobile Phone Convenience */}
+                  {/* Dual Action Buttons with Direct Embedded Inputs for 100% App & WebView Compatibility */}
                   <div className="grid grid-cols-2 gap-2">
-                    <label
-                      htmlFor="new-offer-gallery-file"
-                      className="py-3 px-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-500/25 active:scale-95 transition-all text-center"
-                    >
+                    <div className="relative py-3 px-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-500/25 active:scale-95 transition-all text-center overflow-hidden">
                       <ImageIcon className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span>Choose from Gallery</span>
-                    </label>
-                    <label
-                      htmlFor="new-offer-camera-file"
-                      className="py-3 px-3 bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-700 active:scale-95 transition-all text-center"
-                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        onChange={handleFileChange}
+                      />
+                    </div>
+                    <div className="relative py-3 px-3 bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-700 active:scale-95 transition-all text-center overflow-hidden">
                       <Camera className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span>Take Photo (Camera)</span>
-                    </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        onChange={handleFileChange}
+                      />
+                    </div>
                   </div>
 
                   <div>

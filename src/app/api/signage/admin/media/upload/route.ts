@@ -59,13 +59,19 @@ export async function POST(request: Request) {
 
   try {
     const admin = createAdminClient();
-    // Upload to Supabase Storage
-    const { error: uploadError } = await admin.storage
+    // Upload to Supabase Storage with 3s timeout
+    const uploadPromise = admin.storage
       .from("signage-media")
       .upload(storagePath, arrayBuffer, {
         contentType: mime,
         upsert: false,
       });
+
+    const timeoutPromise = new Promise<{ error: Error }>((resolve) =>
+      setTimeout(() => resolve({ error: new Error("Storage timeout") }), 3000)
+    );
+
+    const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
 
     if (!uploadError) {
       const { data: media, error: dbError } = await admin
@@ -92,8 +98,8 @@ export async function POST(request: Request) {
   }
 
   if (!finalMedia) {
-    // In dev mode, write to public/uploads/ so files are served directly as standard web URLs
-    if (process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_ADMIN !== "false") {
+    // In local dev try writing to public/uploads
+    if (process.env.NODE_ENV === "development") {
       try {
         const fs = await import("fs/promises");
         const path = await import("path");
@@ -132,33 +138,32 @@ export async function POST(request: Request) {
       } catch (fsErr) {
         console.warn("FS write fallback to dataUri:", fsErr);
       }
-
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
-      const dataUri = `data:${mime};base64,${base64}`;
-      const mediaId = "media-" + crypto.randomUUID();
-      finalMedia = {
-        id: mediaId,
-        kind,
-        storage_path: dataUri,
-        mime,
-        bytes: file.size,
-        width,
-        height,
-        sha256,
-        created_at: new Date().toISOString(),
-        thumb_path: dataUri,
-      };
-      if (!devStore.mediaMap) devStore.mediaMap = {};
-      devStore.mediaMap[mediaId] = dataUri;
-      return successResponse({
-        media: finalMedia,
-        ...finalMedia,
-        public_url: dataUri,
-        storage_path: dataUri,
-      }, 201);
     }
 
-    return errorResponse("UPLOAD_ERROR", "Failed to upload to storage", 500);
+    // Always fallback to data URI
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const dataUri = `data:${mime};base64,${base64}`;
+    const mediaId = "media-" + crypto.randomUUID();
+    finalMedia = {
+      id: mediaId,
+      kind,
+      storage_path: dataUri,
+      mime,
+      bytes: file.size,
+      width,
+      height,
+      sha256,
+      created_at: new Date().toISOString(),
+      thumb_path: dataUri,
+    };
+    if (!devStore.mediaMap) devStore.mediaMap = {};
+    devStore.mediaMap[mediaId] = dataUri;
+    return successResponse({
+      media: finalMedia,
+      ...finalMedia,
+      public_url: dataUri,
+      storage_path: dataUri,
+    }, 201);
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

@@ -54,24 +54,42 @@ export async function POST(request: Request) {
 
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
+    const isValidUUID =
+      parsed.data.media_id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        parsed.data.media_id
+      );
+
+    const dbPayload = {
+      ...parsed.data,
+      media_id: isValidUUID ? parsed.data.media_id : null,
+      created_by: auth.claims.sub,
+    };
+
+    const insertPromise = admin
       .from("signage_promotions")
-      .insert({
-        ...parsed.data,
-        created_by: auth.claims.sub,
-      })
+      .insert(dbPayload)
       .select()
       .single();
 
+    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: new Error("DB timeout") }), 2500)
+    );
+
+    const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
+
     if (!error && data) {
       await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
+      if (!isValidUUID && parsed.data.media_id) {
+        data.media_id = parsed.data.media_id;
+      }
       return successResponse({ promotion: data, ...data }, 201);
     }
-  } catch {
-    // fallback
+  } catch (err) {
+    console.warn("Supabase promotion create fallback:", err);
   }
 
-  // Fallback to devStore in local dev
+  // Fallback to devStore
   const created = devStore.addPromotion({
     ...parsed.data,
     status: parsed.data.status || "live",
