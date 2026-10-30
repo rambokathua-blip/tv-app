@@ -21,14 +21,14 @@ const FALLBACK_MANIFEST: SignageManifest = {
     {
       id: "qr-wa",
       label: "WhatsApp Channel",
-      target_url: "https://whatsapp.com/channel/kathuafresh",
-      caption: "Scan for daily wholesale rates & deals",
+      target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
+      caption: "Join for daily wholesale rates & deals",
     },
     {
       id: "qr-ig",
       label: "Instagram",
-      target_url: "https://instagram.com/kathuafresh",
-      caption: "Follow us @kathuafresh",
+      target_url: "https://www.instagram.com/kathua_fresh/",
+      caption: "Follow @kathua_fresh for daily offers",
     },
   ],
   slides: [

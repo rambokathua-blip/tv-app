@@ -86,8 +86,8 @@ class DevStore {
     {
       id: "qr-wa",
       label: "WhatsApp Channel",
-      target_url: "https://whatsapp.com/channel/kathuafresh",
-      caption: "Scan for daily wholesale rates & deals",
+      target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
+      caption: "Join for daily wholesale rates & deals",
       position: 1,
       enabled: true,
       created_at: "2026-10-30T00:00:00.000Z",
@@ -95,8 +95,8 @@ class DevStore {
     {
       id: "qr-ig",
       label: "Instagram",
-      target_url: "https://instagram.com/kathuafresh",
-      caption: "Follow us @kathuafresh",
+      target_url: "https://www.instagram.com/kathua_fresh/",
+      caption: "Follow @kathua_fresh for daily offers",
       position: 2,
       enabled: true,
       created_at: "2026-10-30T00:00:00.000Z",

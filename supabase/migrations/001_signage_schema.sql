@@ -249,8 +249,8 @@ VALUES (
 
 -- Default QR codes
 INSERT INTO signage_qr_codes (label, target_url, caption, position, enabled) VALUES
-  ('WhatsApp', 'https://wa.me/your-number', 'Join our WhatsApp Channel', 0, true),
-  ('Instagram', 'https://instagram.com/kathuafresh', 'Follow for daily offers', 1, true);
+  ('WhatsApp Channel', 'https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B', 'Join for daily wholesale rates & deals', 0, true),
+  ('Instagram', 'https://www.instagram.com/kathua_fresh/', 'Follow @kathua_fresh for daily offers', 1, true);
 
 -- Default voice settings
 INSERT INTO signage_voice_settings (master_enabled, volume, min_gap_sec, welcome_on_start)
