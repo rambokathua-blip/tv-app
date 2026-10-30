@@ -173,8 +173,8 @@ class DevStore {
       .filter((item) => item.enabled)
       .map((item) => {
         const promo =
-          item.promotion ||
-          this.promotions.find((p) => p.id === item.promotion_id);
+          this.promotions.find((p) => p.id === item.promotion_id) ||
+          item.promotion;
         if (!promo || !promo.enabled) return null;
 
         let imgUrl =

@@ -92,8 +92,47 @@ export async function POST(request: Request) {
   }
 
   if (!finalMedia) {
-    // In dev mode, fall back to Data URL so uploads work immediately
+    // In dev mode, write to public/uploads/ so files are served directly as standard web URLs
     if (process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_ADMIN !== "false") {
+      try {
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const uploadsDir = path.join(process.cwd(), "public", "uploads");
+        await fs.mkdir(uploadsDir, { recursive: true });
+
+        const filename = `${crypto.randomUUID()}.${ext}`;
+        const filePath = path.join(uploadsDir, filename);
+        await fs.writeFile(filePath, Buffer.from(arrayBuffer));
+
+        const publicUrl = `/uploads/${filename}`;
+        const mediaId = "media-" + crypto.randomUUID();
+
+        finalMedia = {
+          id: mediaId,
+          kind,
+          storage_path: publicUrl,
+          mime,
+          bytes: file.size,
+          width,
+          height,
+          sha256,
+          created_at: new Date().toISOString(),
+          thumb_path: publicUrl,
+        };
+
+        if (!devStore.mediaMap) devStore.mediaMap = {};
+        devStore.mediaMap[mediaId] = publicUrl;
+
+        return successResponse({
+          media: finalMedia,
+          ...finalMedia,
+          public_url: publicUrl,
+          storage_path: publicUrl,
+        }, 201);
+      } catch (fsErr) {
+        console.warn("FS write fallback to dataUri:", fsErr);
+      }
+
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       const dataUri = `data:${mime};base64,${base64}`;
       const mediaId = "media-" + crypto.randomUUID();

@@ -76,18 +76,6 @@ export async function POST(request: Request) {
     ...parsed.data,
     status: parsed.data.status || "live",
     enabled: parsed.data.enabled ?? true,
-    media: parsed.data.media_id
-      ? {
-          id: parsed.data.media_id,
-          kind: "image",
-          storage_path: parsed.data.media_id,
-          mime: "image/jpeg",
-          bytes: 200000,
-          sha256: "dev-hash",
-          created_at: new Date().toISOString(),
-          thumb_path: parsed.data.media_id,
-        }
-      : null,
   });
 
   return successResponse({ promotion: created, ...created }, 201);
