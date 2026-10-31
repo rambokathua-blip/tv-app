@@ -9,13 +9,10 @@ import { devStore } from "@/lib/signage/dev-store";
 
 
 /**
- * Device polls this to check the current version number.
- * Very lightweight — just returns the version number.
+ * Device or TV Display polls this to check the current version number.
+ * Open and fast — no pairing required!
  */
 export async function GET(request: Request) {
-  const auth = await requireDevice(request);
-  if (auth.error) return auth.error;
-
   try {
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -32,7 +29,7 @@ export async function GET(request: Request) {
       });
     }
   } catch {
-    // fallback
+    // fallback to devStore
   }
 
   devStore.load();

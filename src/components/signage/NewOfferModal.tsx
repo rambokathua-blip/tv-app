@@ -116,20 +116,20 @@ export default function NewOfferModal({
 
   if (!isOpen) return null;
 
-  const triggerChooseFile = () => {
-    if (typeof window !== "undefined" && (window as any).AndroidSignage?.openImagePicker) {
-      (window as any).AndroidSignage.openImagePicker();
-    } else {
-      fileInputRef.current?.click();
+  const triggerChooseFile = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    fileInputRef.current?.click();
   };
 
-  const triggerCamera = () => {
-    if (typeof window !== "undefined" && (window as any).AndroidSignage?.openCamera) {
-      (window as any).AndroidSignage.openCamera();
-    } else {
-      cameraInputRef.current?.click();
+  const triggerCamera = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    cameraInputRef.current?.click();
   };
 
   // Handle image selection & aspect ratio inspection with client compression
@@ -307,6 +307,16 @@ export default function NewOfferModal({
           }),
         }).catch(() => {});
       }
+
+      // Real-time broadcast to TV / Display Screens immediately
+      try {
+        const syncChannel = new BroadcastChannel("kathua_tv_sync");
+        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+        syncChannel.close();
+      } catch {}
+      try {
+        localStorage.setItem("signage_force_refresh", Date.now().toString());
+      } catch {}
 
       onCreated();
     } catch (err: any) {
@@ -487,44 +497,44 @@ export default function NewOfferModal({
                   />
 
                   {/* Direct Input Over Entire Dashed Box */}
-                  <label
-                    htmlFor="new-offer-file-input"
+                  <button
+                    type="button"
                     onClick={triggerChooseFile}
-                    className="relative border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 shadow-inner block select-none"
+                    className="w-full relative border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 active:border-emerald-400 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-950/70 hover:bg-slate-950 shadow-inner select-none"
                   >
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3 mx-auto">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3 mx-auto pointer-events-none">
                       <Upload className="w-7 h-7" />
                     </div>
-                    <div className="font-bold text-white text-sm sm:text-base">
+                    <div className="font-bold text-white text-sm sm:text-base pointer-events-none">
                       Upload Offer Image
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
+                    <div className="text-xs text-slate-400 mt-1 pointer-events-none">
                       Tap here to choose photo from Phone Gallery or Files
                     </div>
-                    <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/40 rounded-full text-emerald-300 text-xs font-semibold">
+                    <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/40 rounded-full text-emerald-300 text-xs font-semibold pointer-events-none">
                       <ImageIcon className="w-3.5 h-3.5" />
                       <span>JPG, PNG, WebP</span>
                     </div>
-                  </label>
+                  </button>
 
                   {/* Dual Action Buttons */}
                   <div className="grid grid-cols-2 gap-2">
-                    <label
-                      htmlFor="new-offer-file-input"
+                    <button
+                      type="button"
                       onClick={triggerChooseFile}
                       className="py-3 px-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-500/25 active:scale-95 transition-all text-center select-none"
                     >
                       <ImageIcon className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span>Choose from Gallery</span>
-                    </label>
-                    <label
-                      htmlFor="new-offer-camera-input"
+                    </button>
+                    <button
+                      type="button"
                       onClick={triggerCamera}
                       className="py-3 px-3 bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-700 active:scale-95 transition-all text-center select-none"
                     >
                       <Camera className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span>Take Photo (Camera)</span>
-                    </label>
+                    </button>
                   </div>
 
                   <div>

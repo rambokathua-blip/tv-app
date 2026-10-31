@@ -38,8 +38,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val FILE_CHOOSER_REQUEST_CODE = 2001
     private val PERMISSION_REQUEST_CODE = 3001
 
-    // Primary Live TV Screen URL
-    private val TV_URL = "https://tv-app-5wzh.vercel.app/tv?preview=true"
+    // Mode URLs: User / TV Screen Mode and Admin Management Mode
+    private val TV_URL = "https://tv-app-5wzh.vercel.app/tv"
+    private val ADMIN_URL = "https://tv-app-5wzh.vercel.app/admin/signage"
+
+    private fun getSavedMode(): String {
+        return getSharedPreferences("kathua_tv_prefs", Context.MODE_PRIVATE)
+            .getString("app_mode", "tv") ?: "tv"
+    }
+
+    private fun setSavedMode(mode: String) {
+        getSharedPreferences("kathua_tv_prefs", Context.MODE_PRIVATE)
+            .edit().putString("app_mode", mode).apply()
+    }
+
+    private fun getTargetUrlForMode(mode: String): String {
+        return if (mode.lowercase() == "admin") ADMIN_URL else TV_URL
+    }
 
     private var backPressTime: Long = 0
 
@@ -70,8 +85,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // 6. Setup Network Liveness Monitor
         setupNetworkCallback()
 
-        // 7. Load Live Kathua Fresh Signage Display
-        webView.loadUrl(TV_URL)
+        // 7. Load Kathua Fresh Display based on current mode (defaults to User TV mode)
+        val mode = getSavedMode()
+        webView.loadUrl(getTargetUrlForMode(mode))
     }
 
     private fun checkAppPermissions() {
@@ -325,6 +341,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         @JavascriptInterface
+        fun switchMode(mode: String) {
+            runOnUiThread {
+                val target = if (mode.lowercase().contains("admin")) "admin" else "tv"
+                setSavedMode(target)
+                val url = getTargetUrlForMode(target)
+                Toast.makeText(
+                    this@MainActivity,
+                    if (target == "admin") "Switching to Admin Mode..." else "Switching to User TV Mode...",
+                    Toast.LENGTH_SHORT
+                ).show()
+                webView.loadUrl(url)
+            }
+        }
+
+        @JavascriptInterface
+        fun getAppMode(): String {
+            return getSavedMode()
+        }
+
+        @JavascriptInterface
         fun openImagePicker() {
             runOnUiThread {
                 try {
@@ -350,6 +386,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack()
+            return
+        }
         // Prevent accidental exit on remote control back press
         if (backPressTime + 2000 > System.currentTimeMillis()) {
             super.onBackPressed()

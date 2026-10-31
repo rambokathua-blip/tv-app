@@ -86,6 +86,8 @@ declare global {
       speak: (text: string, lang: string) => void;
       playAudio: (url: string) => void;
       getStorageInfo: () => string;
+      switchMode?: (mode: string) => void;
+      getAppMode?: () => string;
     };
   }
 }
@@ -325,106 +327,13 @@ export default function TvPlayerPage() {
     }
   }, []);
 
-  // Pairing Flow: if no token and not preview, request pairing code
-  const startPairing = useCallback(async () => {
-    try {
-      const res = await fetch("/api/signage/device/pair/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          app_version: "1.0.0",
-          android_sdk: 28,
-          webview_version: navigator.userAgent,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPairingCode(data.code);
-        setPollSecret(data.poll_secret);
-        setExpiresIn(data.expires_in_sec || 300);
-
-        // Generate QR code for admin quick pair URL
-        const adminPairUrl = `${window.location.origin}/admin/signage/more/devices?code=${data.code}`;
-        try {
-          const dataUrl = await QRCode.toDataURL(adminPairUrl, {
-            margin: 1,
-            width: 300,
-            color: { dark: "#0f172a", light: "#ffffff" },
-          });
-          setPairingQrSvg(dataUrl);
-        } catch {
-          setPairingQrSvg(
-            `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(adminPairUrl)}`
-          );
-        }
-      }
-    } catch {
-      // Offline or network error
-      setIsOffline(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!token && !isPreview) {
-      startPairing();
-    }
-  }, [token, isPreview, startPairing]);
-
-  // Poll pairing status
-  useEffect(() => {
-    if (!pollSecret || token || isPreview) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch("/api/signage/device/pair/status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ poll_secret: pollSecret }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === "claimed" && data.token) {
-            localStorage.setItem("signage_device_token", data.token);
-            setToken(data.token);
-            setPairingCode(null);
-            setPollSecret(null);
-          } else if (data.status === "expired") {
-            startPairing();
-          }
-        }
-      } catch {
-        // network issue
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [pollSecret, token, isPreview, startPairing]);
-
-  // Countdown timer for pairing code
-  useEffect(() => {
-    if (!pairingCode) return;
-    const timer = setInterval(() => {
-      setExpiresIn((prev) => {
-        if (prev <= 1) {
-          startPairing();
-          return 300;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [pairingCode, startPairing]);
-
-  // Manifest Fetching
+  // Manifest Fetching (User Screen Display Mode — No Pairing Required)
   const fetchManifest = useCallback(async () => {
     try {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const manifestUrl = isPreview
-        ? "/api/signage/device/manifest?preview=true"
-        : "/api/signage/device/manifest";
-      const res = await fetch(manifestUrl, { headers });
+      const res = await fetch("/api/signage/device/manifest", { headers });
       if (res.ok) {
         const data = await res.json();
         setManifest(data);
@@ -434,62 +343,74 @@ export default function TvPlayerPage() {
     } catch {
       setIsOffline(true);
     }
-  }, [token, isPreview]);
+  }, [token]);
 
+  // Initial load
   useEffect(() => {
-    if (token || isPreview) {
-      fetchManifest();
-    }
-  }, [token, isPreview, fetchManifest]);
+    fetchManifest();
+  }, [fetchManifest]);
 
-  // Periodic Version Check & Heartbeat
+  // Real-Time Synchronization (Version Polling + BroadcastChannel + LocalStorage)
   useEffect(() => {
-    if (!token && !isPreview) return;
-
-    // Version polling every 3.5 seconds for instant real-time broadcasts
+    // 1. Version polling every 2 seconds for instant updates across different devices & networks
     const versionPoll = setInterval(async () => {
       try {
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const versionUrl = isPreview
-          ? "/api/signage/device/version?preview=true"
-          : "/api/signage/device/version";
-        const res = await fetch(versionUrl, { headers });
+        const res = await fetch("/api/signage/device/version", { headers });
         if (res.ok) {
           const data = await res.json();
-          if (data.version && data.version > manifest.version) {
+          if (data.version && data.version !== manifest.version) {
             fetchManifest();
           }
           setIsOffline(false);
         }
       } catch {
-        setIsOffline(true);
+        // network issue
       }
-    }, 3500);
+    }, 2000);
 
-    // Heartbeat every 60 seconds
+    // 2. BroadcastChannel for instant 0ms real-time sync across browser tabs/windows
+    let syncChannel: BroadcastChannel | null = null;
+    try {
+      syncChannel = new BroadcastChannel("kathua_tv_sync");
+      syncChannel.onmessage = (event) => {
+        if (event.data?.type === "TV_SYNC" || event.data?.type === "SYNC_OFFERS") {
+          fetchManifest();
+        }
+      };
+    } catch {}
+
+    // 3. Storage event for cross-tab sync
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "signage_force_refresh" || e.key === "kathua_signage_promotions") {
+        fetchManifest();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    // 4. Heartbeat every 60 seconds (optional background telemetry)
     const heartbeatTimer = setInterval(async () => {
-      if (!token) return;
       try {
         const currentSlide = manifest.slides[currentIndex]?.id;
-        await fetch("/api/signage/device/heartbeat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            current_slide_id: currentSlide,
-            current_version: manifest.version,
-            app_version: "1.0.0",
-            android_sdk: 28,
-            webview_version: navigator.userAgent,
-            free_storage_mb: 2048,
-            cache_mb: 120,
-          }),
-        });
-
-        // Background ping to Supabase keep-alive endpoint
+        if (token) {
+          await fetch("/api/signage/device/heartbeat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              current_slide_id: currentSlide,
+              current_version: manifest.version,
+              app_version: "1.0.0",
+              android_sdk: 28,
+              webview_version: navigator.userAgent,
+              free_storage_mb: 2048,
+              cache_mb: 120,
+            }),
+          });
+        }
         fetch("/api/keep-alive").catch(() => {});
       } catch {
         // Ignore heartbeat error
@@ -499,8 +420,10 @@ export default function TvPlayerPage() {
     return () => {
       clearInterval(versionPoll);
       clearInterval(heartbeatTimer);
+      if (syncChannel) syncChannel.close();
+      window.removeEventListener("storage", handleStorage);
     };
-  }, [token, isPreview, manifest.version, manifest.slides, currentIndex, fetchManifest]);
+  }, [token, manifest.version, manifest.slides, currentIndex, fetchManifest]);
 
   // Listen for Live Broadcast Announcements
   useEffect(() => {
@@ -697,155 +620,6 @@ export default function TvPlayerPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [slides.length]);
 
-  // If Pairing Mode is required
-  if (!token && !isPreview && pairingCode) {
-    return (
-      <div
-        style={{
-          width: "100vw",
-          height: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "linear-gradient(135deg, #064e3b 0%, #022c22 100%)",
-          color: "#fff",
-          position: "relative",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ position: "absolute", top: 40, left: 60, display: "flex", alignItems: "center", gap: 18 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/kathua-fresh-logo.jpg"
-            alt="Kathua Fresh Logo"
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 16,
-              objectFit: "cover",
-              boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
-              border: "1px solid rgba(255,255,255,0.2)",
-            }}
-          />
-          <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "0.05em" }}>
-            KATHUA FRESH TV
-          </span>
-        </div>
-
-        <div
-          style={{
-            background: "rgba(255, 255, 255, 0.07)",
-            backdropFilter: "blur(20px)",
-            borderRadius: 28,
-            padding: "50px 70px",
-            border: "1px solid rgba(255, 255, 255, 0.15)",
-            maxWidth: 900,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-          }}
-        >
-          <div style={{ fontSize: 24, color: "#86efac", textTransform: "uppercase", letterSpacing: 3, fontWeight: 600 }}>
-            Device Registration
-          </div>
-          <h1 style={{ fontSize: 52, fontWeight: 800, margin: "16px 0 32px 0", letterSpacing: "-0.02em" }}>
-            Pair this TV Screen
-          </h1>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 50,
-              margin: "20px 0",
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: "#fff",
-                padding: 12,
-                borderRadius: 20,
-                width: 220,
-                height: 220,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={
-                  pairingQrSvg ||
-                  `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                    typeof window !== "undefined"
-                      ? `${window.location.origin}/admin/signage/more/devices?code=${pairingCode}`
-                      : `https://tv-app-5wzh.vercel.app/admin/signage/more/devices?code=${pairingCode}`
-                  )}`
-                }
-                alt="Pairing QR Code"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-              />
-            </div>
-
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontSize: 20, color: "rgba(255,255,255,0.7)", marginBottom: 8 }}>
-                Or enter this 6-character code in your phone:
-              </div>
-              <div
-                style={{
-                  fontSize: 76,
-                  fontWeight: 900,
-                  letterSpacing: 12,
-                  color: "#4ade80",
-                  fontFamily: "monospace",
-                  background: "rgba(0,0,0,0.3)",
-                  padding: "10px 28px",
-                  borderRadius: 16,
-                  border: "2px solid #22c55e",
-                  display: "inline-block",
-                }}
-              >
-                {pairingCode}
-              </div>
-              <div style={{ marginTop: 14, fontSize: 18, color: "#cbd5e1" }}>
-                Code expires in: <strong style={{ color: "#facc15" }}>{expiresIn}s</strong>
-              </div>
-            </div>
-          </div>
-
-          <p style={{ fontSize: 20, color: "rgba(255, 255, 255, 0.75)", marginTop: 30, maxWidth: 640 }}>
-            Open <strong>Kathua Fresh Admin</strong> on your phone &rarr; Tap <strong>More</strong> &rarr; <strong>TV Devices</strong> &rarr; <strong>Pair TV</strong>
-          </p>
-        </div>
-
-        {isOffline && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 24,
-              backgroundColor: "rgba(239, 68, 68, 0.8)",
-              padding: "8px 20px",
-              borderRadius: 30,
-              fontSize: 16,
-              fontWeight: 600,
-            }}
-          >
-            ● Waiting for network connection...
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // Active Slideshow Rendering
   const currentSlide: ManifestSlide = slides[currentIndex] || slides[0];
   const nextSlide: ManifestSlide = slides[nextIndex] || slides[0];
@@ -869,6 +643,68 @@ export default function TvPlayerPage() {
         zIndex: 9999,
       }}
     >
+      {/* Top-Right Floating Controls: Switch Mode & Audio Toggle */}
+      <div
+        style={{
+          position: "fixed",
+          top: 18,
+          right: 22,
+          zIndex: 10001,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <button
+          onClick={toggleTvAudio}
+          title="Toggle store audio"
+          style={{
+            background: isAudioMuted ? "rgba(239, 68, 68, 0.85)" : "rgba(16, 185, 129, 0.85)",
+            color: "#ffffff",
+            border: "1px solid rgba(255,255,255,0.25)",
+            borderRadius: 24,
+            padding: "6px 14px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+            backdropFilter: "blur(12px)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span>{isAudioMuted ? "🔇 Audio OFF" : "🔊 Audio ON"}</span>
+        </button>
+
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+              (window as any).AndroidSignage.switchMode("admin");
+            } else {
+              window.location.href = "/admin/signage";
+            }
+          }}
+          title="Open Admin Management Screen"
+          style={{
+            background: "rgba(15, 23, 42, 0.85)",
+            color: "#38bdf8",
+            border: "1px solid rgba(56, 189, 248, 0.35)",
+            borderRadius: 24,
+            padding: "6px 16px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+            backdropFilter: "blur(12px)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span>🛠️ Admin Mode</span>
+        </button>
+      </div>
       <div
         ref={canvasRef}
         style={{
@@ -2083,12 +1919,15 @@ export default function TvPlayerPage() {
               </span>
             </div>
 
-            {/* Action 1: Connect Phone */}
+            {/* Action 1: Open Admin Panel */}
             <button
               onClick={() => {
                 setShowQuickMenu(false);
-                startPairing();
-                setShowConnectModal(true);
+                if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+                  (window as any).AndroidSignage.switchMode("admin");
+                } else {
+                  setShowConnectModal(true);
+                }
               }}
               style={{
                 display: "flex",
@@ -2108,10 +1947,10 @@ export default function TvPlayerPage() {
               <Smartphone size={20} style={{ flexShrink: 0, color: "#4ade80" }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
-                  Connect Phone / Pair TV
+                  Open Admin Mode (Upload Offers)
                 </div>
                 <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
-                  Show QR code & 6-char pairing code
+                  Manage offers & images on phone or device
                 </div>
               </div>
             </button>
@@ -2336,15 +2175,15 @@ export default function TvPlayerPage() {
               <span>Hard Reload TV App</span>
             </button>
 
-            {/* Action 7: Unpair TV (if paired) */}
+            {/* Action 7: Reset & Refresh Display */}
             {token && (
               <button
                 onClick={() => {
-                  if (confirm("Are you sure you want to unpair this TV?")) {
+                  if (confirm("Reset TV Display cache?")) {
                     localStorage.removeItem("signage_device_token");
                     setToken(null);
                     setShowQuickMenu(false);
-                    startPairing();
+                    fetchManifest();
                   }
                 }}
                 style={{
@@ -2365,7 +2204,7 @@ export default function TvPlayerPage() {
                 <LogOut size={16} style={{ flexShrink: 0, color: "#ef4444" }} />
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>
-                    Unpair TV Screen
+                    Reset Display Cache
                   </div>
                 </div>
               </button>
@@ -2431,14 +2270,14 @@ export default function TvPlayerPage() {
             </button>
 
             <div style={{ fontSize: 13, color: "#86efac", textTransform: "uppercase", letterSpacing: 3, fontWeight: 700 }}>
-              Kathua Fresh TV Hub
+              Kathua Fresh Management
             </div>
-            <h2 style={{ fontSize: 32, fontWeight: 800, margin: "10px 0 24px 0", color: "#ffffff" }}>
-              Connect Phone to TV
+            <h2 style={{ fontSize: 30, fontWeight: 800, margin: "10px 0 20px 0", color: "#ffffff" }}>
+              Shop Admin Controller
             </h2>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32, margin: "24px 0" }}>
-              {/* QR Code */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32, margin: "20px 0" }}>
+              {/* QR Code linking to Admin Mode */}
               <div
                 style={{
                   backgroundColor: "#ffffff",
@@ -2454,51 +2293,37 @@ export default function TvPlayerPage() {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={
-                    pairingQrSvg ||
-                    `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                      typeof window !== "undefined"
-                        ? `${window.location.origin}/admin/signage/more/devices?code=${pairingCode}`
-                        : ""
-                    )}`
-                  }
-                  alt="Scan to Pair"
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/admin/signage`
+                      : "https://tv-app-5wzh.vercel.app/admin/signage"
+                  )}`}
+                  alt="Scan to Open Admin"
                   style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                 />
               </div>
 
-              {/* 6-char Code Display */}
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontSize: 14, color: "rgba(255, 255, 255, 0.7)", marginBottom: 8 }}>
-                  Scan QR or enter code in Admin:
+              {/* Instructions */}
+              <div style={{ textAlign: "left", maxWidth: 280 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#4ade80", marginBottom: 6 }}>
+                  📱 Open on your Phone
                 </div>
-                <div
-                  style={{
-                    fontSize: 48,
-                    fontWeight: 900,
-                    letterSpacing: 6,
-                    color: "#4ade80",
-                    fontFamily: "monospace",
-                    background: "rgba(0,0,0,0.4)",
-                    padding: "8px 20px",
-                    borderRadius: 16,
-                    border: "2px solid #22c55e",
-                    display: "inline-block",
-                  }}
-                >
-                  {pairingCode || "......"}
-                </div>
-                <div style={{ marginTop: 10, fontSize: 14, color: "#cbd5e1" }}>
-                  Code expires in: <strong style={{ color: "#facc15" }}>{expiresIn}s</strong>
+                <div style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", lineHeight: 1.5 }}>
+                  Point your phone camera at the QR code to open <strong>Kathua Fresh Admin</strong>. Any image you upload or price you change updates this screen in real-time!
                 </div>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
-              <a
-                href={`/admin/signage/more/devices?code=${pairingCode}`}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                onClick={() => {
+                  setShowConnectModal(false);
+                  if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+                    (window as any).AndroidSignage.switchMode("admin");
+                  } else {
+                    window.location.href = "/admin/signage";
+                  }
+                }}
                 style={{
                   padding: "12px 24px",
                   borderRadius: 14,
@@ -2506,15 +2331,16 @@ export default function TvPlayerPage() {
                   color: "#022c22",
                   fontWeight: 700,
                   fontSize: 13,
-                  textDecoration: "none",
+                  border: "none",
+                  cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
                 }}
               >
                 <ExternalLink size={16} />
-                <span>Open Admin Pair Page</span>
-              </a>
+                <span>Switch to Admin on this Device</span>
+              </button>
               <button
                 onClick={() => setShowConnectModal(false)}
                 style={{

@@ -10,14 +10,11 @@ import { devStore } from "@/lib/signage/dev-store";
 
 
 /**
- * Device fetches the full manifest for the current version.
- * Supports ETag/If-None-Match for efficient polling.
+ * Device or TV Display fetches the full manifest.
+ * Open and fast — no device pairing code required!
  */
 export async function GET(request: Request) {
   try {
-    const auth = await requireDevice(request).catch(() => ({ deviceId: "preview-device" }));
-    if (auth && "error" in auth && auth.error) return auth.error;
-
     try {
       const admin = createAdminClient();
       const { data, error } = await admin
@@ -45,7 +42,7 @@ export async function GET(request: Request) {
     console.warn("Manifest GET warning:", err);
   }
 
-  // Fallback to devStore in dev mode
+  // Fallback to devStore
   try {
     const manifest = devStore.getManifest();
     const etag = `"v${devStore.version}"`;

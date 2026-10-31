@@ -187,20 +187,20 @@ export default function EditOfferModal({
 
   if (!isOpen) return null;
 
-  const triggerChooseFile = () => {
-    if (typeof window !== "undefined" && (window as any).AndroidSignage?.openImagePicker) {
-      (window as any).AndroidSignage.openImagePicker();
-    } else {
-      fileInputRef.current?.click();
+  const triggerChooseFile = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    fileInputRef.current?.click();
   };
 
-  const triggerCamera = () => {
-    if (typeof window !== "undefined" && (window as any).AndroidSignage?.openCamera) {
-      (window as any).AndroidSignage.openCamera();
-    } else {
-      cameraInputRef.current?.click();
+  const triggerCamera = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    cameraInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,6 +334,16 @@ export default function EditOfferModal({
         }),
       }).catch(() => {});
 
+      // Real-time broadcast to all TV display screens
+      try {
+        const syncChannel = new BroadcastChannel("kathua_tv_sync");
+        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+        syncChannel.close();
+      } catch {}
+      try {
+        localStorage.setItem("signage_force_refresh", Date.now().toString());
+      } catch {}
+
       onUpdated();
       onClose();
     } catch (err: any) {
@@ -442,14 +452,14 @@ export default function EditOfferModal({
               )}
 
               {/* Top overlay Quick Trigger */}
-              <label
-                htmlFor="edit-offer-file-input"
+              <button
+                type="button"
                 onClick={triggerChooseFile}
-                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm border border-white/20 active:scale-95 transition-all shadow-md cursor-pointer"
+                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm border border-white/20 active:scale-95 transition-all shadow-md cursor-pointer select-none"
               >
                 <Upload className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Change Image</span>
-              </label>
+              </button>
             </div>
 
             {/* Photo Selection Tabs */}
@@ -496,22 +506,22 @@ export default function EditOfferModal({
               {/* Tab 1: Upload & Camera Buttons */}
               {imageTab === "upload" && (
                 <div className="grid grid-cols-2 gap-2">
-                  <label
-                    htmlFor="edit-offer-file-input"
+                  <button
+                    type="button"
                     onClick={triggerChooseFile}
                     className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                   >
                     <Upload className="w-4 h-4 shrink-0" />
                     <span>Choose from Files / Gallery</span>
-                  </label>
-                  <label
-                    htmlFor="edit-offer-camera-input"
+                  </button>
+                  <button
+                    type="button"
                     onClick={triggerCamera}
                     className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                   >
                     <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>Take New Photo (Camera)</span>
-                  </label>
+                  </button>
                 </div>
               )}
 

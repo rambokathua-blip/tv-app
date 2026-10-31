@@ -313,34 +313,35 @@ export default function TvDevicesPage() {
             <span>TV Devices & Displays</span>
           </h1>
           <p className="text-xs text-slate-400">
-            Registered displays and Android TV signage players
+            Live displays & TV players connected to Kathua Fresh
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Quick Scanner Button */}
-          <button
-            onClick={() => {
-              setActiveTab("camera");
-              setShowPairModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/20 active:scale-95"
-          >
-            <Camera className="w-4 h-4 stroke-[2.5]" />
-            <span>Scan TV QR</span>
-          </button>
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+              (window as any).AndroidSignage.switchMode("tv");
+            } else {
+              window.open("/tv", "_blank");
+            }
+          }}
+          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/20 active:scale-95"
+        >
+          <Tv className="w-4 h-4 stroke-[2.5]" />
+          <span>Open TV Display Screen</span>
+        </button>
+      </div>
 
-          {/* Manual Code Button */}
-          <button
-            onClick={() => {
-              setActiveTab("manual");
-              setShowPairModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all border border-slate-700/80 active:scale-95"
-          >
-            <Keyboard className="w-4 h-4 text-slate-400" />
-            <span>Enter Code</span>
-          </button>
+      {/* Direct Sync Active Banner */}
+      <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 flex items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <div className="text-xs sm:text-sm font-bold text-emerald-300 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Real-Time Auto-Sync Active (Scanner / Pairing Code Not Required)
+          </div>
+          <div className="text-[11px] sm:text-xs text-slate-300">
+            Any Smart TV or browser opening <span className="font-mono text-emerald-400 font-bold">/tv</span> displays your published images and offers in real time.
+          </div>
         </div>
       </div>
 

@@ -55,14 +55,20 @@ export default function AdminSignageLayout({
           </div>
         </div>
 
-        <Link
-          href="/tv?preview=true"
-          target="_blank"
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+              (window as any).AndroidSignage.switchMode("tv");
+            } else {
+              window.open("/tv", "_blank");
+            }
+          }}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition-all shadow-sm active:scale-95"
+          title="Switch to User Screen / TV Display Mode"
         >
-          <Tv className="w-3.5 h-3.5 text-emerald-400" />
-          <span>TV View</span>
-        </Link>
+          <Tv className="w-4 h-4 text-emerald-400" />
+          <span>📺 User Mode</span>
+        </button>
       </header>
 
       {/* Main Content Area */}
