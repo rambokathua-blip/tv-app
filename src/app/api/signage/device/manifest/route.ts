@@ -9,6 +9,9 @@ import { NextResponse } from "next/server";
 import { devStore } from "@/lib/signage/dev-store";
 
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Device or TV Display fetches the full manifest.
  * Open and fast — no device pairing code required!

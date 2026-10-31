@@ -5,8 +5,25 @@ const nextConfig: NextConfig = {
   experimental: {
     agentFeedback: true,
   },
-  cacheComponents: true,
-  partialPrefetching: true,
+  headers: async () => [
+    {
+      source: "/:path*",
+      headers: [
+        {
+          key: "Cache-Control",
+          value: "no-cache, no-store, max-age=0, must-revalidate",
+        },
+        {
+          key: "CDN-Cache-Control",
+          value: "no-store",
+        },
+        {
+          key: "Vercel-CDN-Cache-Control",
+          value: "no-store",
+        },
+      ],
+    },
+  ],
   turbopack: {
     rules: {
       "*.css": {

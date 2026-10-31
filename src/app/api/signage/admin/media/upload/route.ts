@@ -6,6 +6,9 @@ import {
 } from "@/lib/signage/api-utils";
 import { devStore } from "@/lib/signage/dev-store";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();

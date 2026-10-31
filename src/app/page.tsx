@@ -11,6 +11,9 @@ import {
 
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "Kathua Fresh TV",
   description: "Smart Digital Signage Platform for Kathua Fresh Store TV",

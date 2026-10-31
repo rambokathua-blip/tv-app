@@ -10,6 +10,9 @@ import {
 import { devStore } from "@/lib/signage/dev-store";
 import { updatePromotionSchema } from "@/lib/signage/schemas";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(
   _request: NextRequest,
   ctx: RouteContext<"/api/signage/admin/promotions/[id]">

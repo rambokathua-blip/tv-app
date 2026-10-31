@@ -12,6 +12,9 @@ import {
 import { devStore } from "@/lib/signage/dev-store";
 
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
