@@ -14,6 +14,7 @@ import {
   Volume2,
   VolumeX,
   Tv,
+  Sparkles,
 } from "lucide-react";
 import type { SignageManifest, ManifestSlide } from "@/lib/signage/types";
 
@@ -95,9 +96,20 @@ export default function TvPlayerPage() {
   const [manifest, setManifest] = useState<SignageManifest>(FALLBACK_MANIFEST);
   const [qrSvgMap, setQrSvgMap] = useState<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [nextIndex, setNextIndex] = useState(0);
-  const [isFading, setIsFading] = useState(false);
+  const [prevIndex, setPrevIndex] = useState<number | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionStyle, setTransitionStyle] = useState<"cinematic" | "slide">("cinematic");
   const [slideProgress, setSlideProgress] = useState(0);
+
+  // Load saved transition style from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("tv_transition_style");
+      if (saved === "slide" || saved === "cinematic") {
+        setTransitionStyle(saved);
+      }
+    }
+  }, []);
   const [isOffline, setIsOffline] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
@@ -807,6 +819,23 @@ export default function TvPlayerPage() {
     return raw.length > 0 ? raw : FALLBACK_MANIFEST.slides;
   }, [manifest.slides]);
 
+  // Smooth slide navigator: handles dual-buffer transition timing
+  const goToSlide = useCallback((targetIndex: number) => {
+    if (slides.length <= 1 || isTransitioning) return;
+    const safeTarget = (targetIndex + slides.length) % slides.length;
+    if (safeTarget === currentIndex) return;
+
+    setPrevIndex(currentIndex);
+    setCurrentIndex(safeTarget);
+    setIsTransitioning(true);
+    setSlideProgress(0);
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setPrevIndex(null);
+    }, 950);
+  }, [slides.length, isTransitioning, currentIndex]);
+
   useEffect(() => {
     if (slides.length <= 1 || isPaused) return;
 
@@ -824,22 +853,14 @@ export default function TvPlayerPage() {
 
     // Slide transition timer
     const slideTimer = setTimeout(() => {
-      const next = (safeIndex + 1) % slides.length;
-      setNextIndex(next);
-      setIsFading(true);
-
-      setTimeout(() => {
-        setCurrentIndex(next);
-        setIsFading(false);
-        setSlideProgress(0);
-      }, 600); // 600ms cross-fade matching PRD FR-PL-05
+      goToSlide(safeIndex + 1);
     }, duration);
 
     return () => {
       clearInterval(progressInterval);
       clearTimeout(slideTimer);
     };
-  }, [currentIndex, slides.length, isPaused]);
+  }, [currentIndex, slides.length, isPaused, goToSlide]);
 
   // Speech Announcement trigger
   const triggerAnnouncement = useCallback(
@@ -861,22 +882,119 @@ export default function TvPlayerPage() {
       if (e.code === "Space") {
         setIsPaused((p) => !p);
       } else if (e.code === "ArrowRight") {
-        setCurrentIndex((prev) => (prev + 1) % slides.length);
-        setSlideProgress(0);
+        goToSlide(currentIndex + 1);
       } else if (e.code === "ArrowLeft") {
-        setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length);
-        setSlideProgress(0);
+        goToSlide(currentIndex - 1);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [slides.length]);
+  }, [currentIndex, goToSlide]);
 
   // Active Slideshow Rendering
   const safeCurrentIndex = slides.length > 0 ? currentIndex % slides.length : 0;
   const currentSlide: ManifestSlide = slides[safeCurrentIndex] || slides[0];
-  const safeNextIndex = slides.length > 0 ? nextIndex % slides.length : 0;
-  const nextSlide: ManifestSlide = slides[safeNextIndex] || slides[0];
+  const outgoingSlide: ManifestSlide | null = (prevIndex !== null && slides[prevIndex]) ? slides[prevIndex] : null;
+  const nextPreloadSlide: ManifestSlide = slides[(safeCurrentIndex + 1) % slides.length] || slides[0];
+
+  // Helper to render slide content with silky-smooth GPU-accelerated transition
+  const renderSlideContent = (slide: ManifestSlide, role: "current" | "outgoing" | "static") => {
+    if (!slide) return null;
+    const isOutgoing = role === "outgoing";
+    const isCurrent = role === "current";
+
+    let animStyle = "";
+    if (isTransitioning) {
+      if (isOutgoing) {
+        animStyle = transitionStyle === "slide"
+          ? "slideGlideOutLeft 900ms cubic-bezier(0.25, 1, 0.5, 1) forwards"
+          : "slideCinematicOut 950ms cubic-bezier(0.4, 0, 0.2, 1) forwards";
+      } else if (isCurrent) {
+        animStyle = transitionStyle === "slide"
+          ? "slideGlideInRight 900ms cubic-bezier(0.25, 1, 0.5, 1) forwards"
+          : "slideCinematicIn 950ms cubic-bezier(0.25, 1, 0.5, 1) forwards";
+      }
+    }
+
+    const isLogo = slide.image_url?.includes("logo");
+
+    return (
+      <div
+        key={`${slide.id}-${role}`}
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: isCurrent ? 20 : 10,
+          animation: animStyle || undefined,
+          overflow: "hidden",
+          backgroundColor: "#000",
+          willChange: isTransitioning ? "opacity, transform" : "auto",
+        }}
+      >
+        {slide.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={slide.image_url}
+            alt={slide.title}
+            onError={(e) => {
+              if (e.currentTarget.src !== "/kathua-fresh-logo.jpg") {
+                e.currentTarget.src = "/kathua-fresh-logo.jpg";
+              }
+            }}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: isLogo ? "contain" : "cover",
+              padding: isLogo ? "36px 48px" : "0",
+              animation: !isLogo && !isTransitioning && role === "static" ? "kenBurnsSlow 10s ease-out forwards" : undefined,
+              willChange: "transform",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "radial-gradient(circle, #065f46 0%, #022c22 100%)",
+            }}
+          >
+            <h2 style={{ fontSize: 64, fontWeight: 800, color: "#fff" }}>
+              {slide.title}
+            </h2>
+          </div>
+        )}
+
+        {/* Price overlay banner */}
+        {slide.price_text && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 40,
+              left: 40,
+              backgroundColor: "rgba(15, 23, 42, 0.88)",
+              backdropFilter: "blur(12px)",
+              padding: "16px 36px",
+              borderRadius: 20,
+              border: "2px solid #22c55e",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+              animation: isCurrent && isTransitioning ? "priceBadgeReveal 600ms cubic-bezier(0.16, 1, 0.3, 1) 200ms backwards" : undefined,
+            }}
+          >
+            <div style={{ fontSize: 28, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>
+              {slide.title}
+            </div>
+            <div style={{ fontSize: 68, fontWeight: 900, color: "#facc15", letterSpacing: "-0.02em" }}>
+              {slide.price_text}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -925,103 +1043,26 @@ export default function TvPlayerPage() {
           overflow: "hidden",
         }}
       >
-        {/* Current Slide */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: isFading ? 0 : 1,
-            transition: "opacity 600ms ease-in-out",
-          }}
-        >
-          {currentSlide.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={currentSlide.image_url}
-              alt={currentSlide.title}
-              onError={(e) => {
-                if (e.currentTarget.src !== "/kathua-fresh-logo.jpg") {
-                  e.currentTarget.src = "/kathua-fresh-logo.jpg";
-                }
-              }}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: currentSlide.image_url?.includes("logo") ? "contain" : "cover",
-                padding: currentSlide.image_url?.includes("logo") ? "36px 48px" : "0",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "radial-gradient(circle, #065f46 0%, #022c22 100%)",
-              }}
-            >
-              <h2 style={{ fontSize: 64, fontWeight: 800, color: "#fff" }}>
-                {currentSlide.title}
-              </h2>
-            </div>
-          )}
+        {/* Outgoing Slide during smooth transition */}
+        {isTransitioning && outgoingSlide && renderSlideContent(outgoingSlide, "outgoing")}
 
-          {/* Price overlay banner (if specified in promotion) */}
-          {currentSlide.price_text && (
-            <div
-              style={{
-                position: "absolute",
-                bottom: 40,
-                left: 40,
-                backgroundColor: "rgba(15, 23, 42, 0.88)",
-                backdropFilter: "blur(12px)",
-                padding: "16px 36px",
-                borderRadius: 20,
-                border: "2px solid #22c55e",
-                boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
-              }}
-            >
-              <div style={{ fontSize: 28, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>
-                {currentSlide.title}
-              </div>
-              <div style={{ fontSize: 68, fontWeight: 900, color: "#facc15", letterSpacing: "-0.02em" }}>
-                {currentSlide.price_text}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Active/Incoming Slide */}
+        {renderSlideContent(currentSlide, isTransitioning ? "current" : "static")}
 
-        {/* Next Slide (pre-decoded for smooth crossfade) */}
-        {isFading && (
-          <div
+        {/* Hidden Pre-Decoder for Next Slide to prevent frame drops */}
+        {nextPreloadSlide?.image_url && nextPreloadSlide.image_url !== currentSlide?.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={nextPreloadSlide.image_url}
+            alt="pre-decode"
             style={{
               position: "absolute",
-              inset: 0,
-              opacity: 1,
+              width: 1,
+              height: 1,
+              opacity: 0.001,
+              pointerEvents: "none",
             }}
-          >
-            {nextSlide.image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={nextSlide.image_url}
-                alt={nextSlide.title}
-                onError={(e) => {
-                  if (e.currentTarget.src !== "/kathua-fresh-logo.jpg") {
-                    e.currentTarget.src = "/kathua-fresh-logo.jpg";
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: nextSlide.image_url?.includes("logo") ? "contain" : "cover",
-                  padding: nextSlide.image_url?.includes("logo") ? "36px 48px" : "0",
-                }}
-              />
-            )}
-          </div>
+          />
         )}
 
         {/* On-Air Live Announcement Overlay Banner */}
@@ -1949,6 +1990,68 @@ export default function TvPlayerPage() {
                 0%, 100% { opacity: 1; transform: scale(1); }
                 50% { opacity: 0.4; transform: scale(0.85); }
               }
+              /* Ultra-smooth cinematic dissolve with subtle scale */
+              @keyframes slideCinematicIn {
+                0% {
+                  opacity: 0;
+                  transform: scale(1.045);
+                }
+                100% {
+                  opacity: 1;
+                  transform: scale(1.0);
+                }
+              }
+              @keyframes slideCinematicOut {
+                0% {
+                  opacity: 1;
+                  transform: scale(1.0);
+                }
+                100% {
+                  opacity: 0;
+                  transform: scale(0.97);
+                }
+              }
+              /* Silky smooth slide transition */
+              @keyframes slideGlideInRight {
+                0% {
+                  opacity: 0.5;
+                  transform: translateX(100%);
+                }
+                100% {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+              }
+              @keyframes slideGlideOutLeft {
+                0% {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+                100% {
+                  opacity: 0.5;
+                  transform: translateX(-100%);
+                }
+              }
+              /* Gentle Ken Burns breathing effect on resting image */
+              @keyframes kenBurnsSlow {
+                0% {
+                  transform: scale(1.0);
+                }
+                100% {
+                  transform: scale(1.035);
+                }
+              }
+              /* Luxury Price Badge reveal */
+              @keyframes priceBadgeReveal {
+                0% {
+                  opacity: 0;
+                  transform: translateY(28px) scale(0.96);
+                }
+                100% {
+                  opacity: 1;
+                  transform: translateY(0) scale(1);
+                }
+              }
               .tv-qr-container svg {
                 width: 100% !important;
                 height: 100% !important;
@@ -2367,6 +2470,77 @@ export default function TvPlayerPage() {
                 <div style={{ fontSize: 12, fontWeight: 600 }}>Toggle Fullscreen</div>
               </div>
             </button>
+
+            {/* Action: Slide Transition Style (Cinematic Fade / Smooth Slide) */}
+            <div
+              style={{
+                padding: "10px 14px",
+                borderRadius: 14,
+                backgroundColor: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Sparkles size={16} style={{ color: "#facc15" }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                    Slide Transition
+                  </span>
+                </div>
+                <span style={{ fontSize: 10, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>
+                  {transitionStyle === "cinematic" ? "Cinematic" : "Slide"}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <button
+                  onClick={() => {
+                    setTransitionStyle("cinematic");
+                    localStorage.setItem("tv_transition_style", "cinematic");
+                    setSyncToast("Cinematic Fade Transition Applied ✨");
+                    setTimeout(() => setSyncToast(null), 2500);
+                  }}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    backgroundColor: transitionStyle === "cinematic" ? "rgba(34, 197, 94, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                    border: transitionStyle === "cinematic" ? "1px solid #22c55e" : "1px solid rgba(255, 255, 255, 0.1)",
+                    color: transitionStyle === "cinematic" ? "#86efac" : "#94a3b8",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  ✨ Smooth Fade
+                </button>
+                <button
+                  onClick={() => {
+                    setTransitionStyle("slide");
+                    localStorage.setItem("tv_transition_style", "slide");
+                    setSyncToast("Smooth Slide Transition Applied ➡️");
+                    setTimeout(() => setSyncToast(null), 2500);
+                  }}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    backgroundColor: transitionStyle === "slide" ? "rgba(56, 189, 248, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                    border: transitionStyle === "slide" ? "1px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.1)",
+                    color: transitionStyle === "slide" ? "#7dd3fc" : "#94a3b8",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  ➡️ Smooth Slide
+                </button>
+              </div>
+            </div>
 
             {/* Action 5: Audio & Interval Timer Settings Card */}
             <div

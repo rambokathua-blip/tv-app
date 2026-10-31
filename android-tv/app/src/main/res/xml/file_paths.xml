@@ -5,3 +5,4 @@
     <files-path name="camera_files" path="." />
     <external-files-path name="camera_files_ext" path="." />
 </paths>
+
