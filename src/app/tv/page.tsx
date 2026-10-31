@@ -643,68 +643,6 @@ export default function TvPlayerPage() {
         zIndex: 9999,
       }}
     >
-      {/* Top-Right Floating Controls: Switch Mode & Audio Toggle */}
-      <div
-        style={{
-          position: "fixed",
-          top: 18,
-          right: 22,
-          zIndex: 10001,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <button
-          onClick={toggleTvAudio}
-          title="Toggle store audio"
-          style={{
-            background: isAudioMuted ? "rgba(239, 68, 68, 0.85)" : "rgba(16, 185, 129, 0.85)",
-            color: "#ffffff",
-            border: "1px solid rgba(255,255,255,0.25)",
-            borderRadius: 24,
-            padding: "6px 14px",
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: "pointer",
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <span>{isAudioMuted ? "🔇 Audio OFF" : "🔊 Audio ON"}</span>
-        </button>
-
-        <button
-          onClick={() => {
-            if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
-              (window as any).AndroidSignage.switchMode("admin");
-            } else {
-              window.location.href = "/admin/signage";
-            }
-          }}
-          title="Open Admin Management Screen"
-          style={{
-            background: "rgba(15, 23, 42, 0.85)",
-            color: "#38bdf8",
-            border: "1px solid rgba(56, 189, 248, 0.35)",
-            borderRadius: 24,
-            padding: "6px 16px",
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: "pointer",
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <span>🛠️ Admin Mode</span>
-        </button>
-      </div>
       <div
         ref={canvasRef}
         style={{
@@ -2040,8 +1978,15 @@ export default function TvPlayerPage() {
             )}
 
             {/* Action 3: Switch to Admin Mode */}
-            <a
-              href="/admin/signage"
+            <button
+              onClick={() => {
+                setShowQuickMenu(false);
+                if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+                  (window as any).AndroidSignage.switchMode("admin");
+                } else {
+                  window.location.href = "/admin/signage";
+                }
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -2051,8 +1996,9 @@ export default function TvPlayerPage() {
                 backgroundColor: "rgba(255, 255, 255, 0.06)",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
                 color: "#ffffff",
-                textDecoration: "none",
                 cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
                 transition: "all 0.15s ease",
               }}
             >
@@ -2066,7 +2012,7 @@ export default function TvPlayerPage() {
                 </div>
               </div>
               <ExternalLink size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
-            </a>
+            </button>
 
             {/* Action 3: TV Devices Management */}
             <a
@@ -2120,10 +2066,7 @@ export default function TvPlayerPage() {
             {/* Action 5: Audio Toggle */}
             <button
               onClick={() => {
-                setIsAudioMuted(!isAudioMuted);
-                if (audioRef.current) {
-                  audioRef.current.muted = !isAudioMuted;
-                }
+                toggleTvAudio();
                 setShowQuickMenu(false);
               }}
               style={{
