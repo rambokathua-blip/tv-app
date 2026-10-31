@@ -187,19 +187,11 @@ export default function EditOfferModal({
 
   if (!isOpen) return null;
 
-  const triggerChooseFile = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const triggerChooseFile = () => {
     fileInputRef.current?.click();
   };
 
-  const triggerCamera = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const triggerCamera = () => {
     cameraInputRef.current?.click();
   };
 

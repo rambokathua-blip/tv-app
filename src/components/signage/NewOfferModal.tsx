@@ -116,19 +116,11 @@ export default function NewOfferModal({
 
   if (!isOpen) return null;
 
-  const triggerChooseFile = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const triggerChooseFile = () => {
     fileInputRef.current?.click();
   };
 
-  const triggerCamera = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const triggerCamera = () => {
     cameraInputRef.current?.click();
   };
 
@@ -468,22 +460,22 @@ export default function NewOfferModal({
 
                   {/* Explicit Mobile Change Picture Buttons */}
                   <div className="grid grid-cols-2 gap-2 pt-0.5">
-                    <label
-                      htmlFor="new-offer-file-input-selected"
+                    <button
+                      type="button"
                       onClick={triggerChooseFile}
                       className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                     >
                       <Upload className="w-4 h-4 shrink-0" />
                       <span>Change Picture</span>
-                    </label>
-                    <label
-                      htmlFor="new-offer-camera-input-selected"
+                    </button>
+                    <button
+                      type="button"
                       onClick={triggerCamera}
                       className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                     >
                       <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Take New Photo</span>
-                    </label>
+                    </button>
                   </div>
 
                   {aspectWarning && (

@@ -25,6 +25,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -35,6 +37,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var ttsReady = false
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private var cameraPhotoUri: Uri? = null
+    private var cameraPhotoFile: File? = null
     private val FILE_CHOOSER_REQUEST_CODE = 2001
     private val PERMISSION_REQUEST_CODE = 3001
 
@@ -186,13 +190,45 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 fileUploadCallback?.onReceiveValue(null)
                 fileUploadCallback = filePathCallback
 
+                // Ensure camera & storage permissions are checked
+                checkAppPermissions()
+
                 try {
-                    val chooserIntent = buildImageChooserIntent(fileChooserParams)
+                    val isCapture = fileChooserParams?.isCaptureEnabled == true
+                    val cameraIntent = createCameraIntent()
+
+                    // If user clicked "Take Photo (Camera)" directly (capture attribute enabled)
+                    if (isCapture) {
+                        startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST_CODE)
+                        return true
+                    }
+
+                    // Otherwise, provide user with bottom sheet containing BOTH Camera and Gallery/Files
+                    val extraIntents = mutableListOf<Intent>()
+                    extraIntents.add(cameraIntent)
+
+                    val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                        type = "image/*"
+                    }
+                    extraIntents.add(galleryIntent)
+
+                    var baseIntent = fileChooserParams?.createIntent()
+                    if (baseIntent == null) {
+                        baseIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "image/*"
+                        }
+                    }
+
+                    val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
+                        putExtra(Intent.EXTRA_INTENT, baseIntent)
+                        putExtra(Intent.EXTRA_TITLE, "Select Offer Image / Camera")
+                        putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toTypedArray())
+                    }
                     startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
                     return true
                 } catch (e: Exception) {
                     try {
-                        // Fallback: direct gallery picker
                         val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
                             type = "image/*"
                         }
@@ -208,40 +244,38 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun buildImageChooserIntent(fileChooserParams: WebChromeClient.FileChooserParams?): Intent {
-        val extraIntents = mutableListOf<Intent>()
+    private fun createCameraImageFile(): File {
+        val storageDir = File(cacheDir, "camera_photos").apply { mkdirs() }
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        return File.createTempFile("CAMERA_${timeStamp}_", ".jpg", storageDir)
+    }
 
-        // 1. Camera option
-        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        if (cameraIntent.resolveActivity(packageManager) != null) {
-            extraIntents.add(cameraIntent)
+    private fun createCameraIntent(): Intent {
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        try {
+            val photoFile = createCameraImageFile()
+            cameraPhotoFile = photoFile
+            val photoUri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                photoFile
+            )
+            cameraPhotoUri = photoUri
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        } catch (e: Exception) {
+            cameraPhotoUri = null
+            cameraPhotoFile = null
         }
+        return intent
+    }
 
-        // 2. Base content picker intent
-        var baseIntent = fileChooserParams?.createIntent()
-        if (baseIntent == null) {
-            baseIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "image/*"
-            }
-        }
-
-        // 3. Fallback gallery intent if supported
-        val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
-            type = "image/*"
-        }
-        if (galleryIntent.resolveActivity(packageManager) != null) {
-            extraIntents.add(galleryIntent)
-        }
-
-        val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
-            putExtra(Intent.EXTRA_INTENT, baseIntent)
-            putExtra(Intent.EXTRA_TITLE, "Select Offer Image")
-            if (extraIntents.isNotEmpty()) {
-                putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toTypedArray())
-            }
-        }
-        return chooserIntent
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -251,7 +285,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             var results: Array<Uri>? = null
             if (resultCode == RESULT_OK) {
-                if (data != null) {
+                // 1. Check if camera captured high-res photo to file
+                val photoFile = cameraPhotoFile
+                val photoUri = cameraPhotoUri
+                if (photoFile != null && photoFile.exists() && photoFile.length() > 0 && photoUri != null) {
+                    results = arrayOf(photoUri)
+                } else if (data != null) {
+                    // 2. Check if user selected file from gallery/documents
                     if (data.data != null) {
                         results = arrayOf(data.data!!)
                     } else if (data.clipData != null) {
@@ -264,10 +304,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         }
                     }
                 }
+            } else {
+                // User cancelled or back pressed: cleanup unused camera file
+                try {
+                    cameraPhotoFile?.delete()
+                } catch (ignored: Exception) {}
             }
 
             fileUploadCallback?.onReceiveValue(results)
             fileUploadCallback = null
+            cameraPhotoUri = null
+            cameraPhotoFile = null
         }
     }
 
