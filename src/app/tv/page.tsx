@@ -511,9 +511,34 @@ export default function TvPlayerPage() {
   const enrichWithLocalPromotions = useCallback((manifestData: SignageManifest): SignageManifest => {
     // If server manifest already has slides from the cloud database, use them directly (cloud is source of truth)
     if (manifestData.slides && manifestData.slides.length > 0) {
-      const validSlides = manifestData.slides.filter(
+      let validSlides = manifestData.slides.filter(
         (s) => s.id !== "demo-onion" && s.id !== "demo-apple"
       );
+
+      // Merge local promotions MRP if server slide is missing MRP
+      try {
+        if (typeof window !== "undefined") {
+          const raw = localStorage.getItem("kathua_signage_promotions");
+          if (raw) {
+            const localList = JSON.parse(raw);
+            if (Array.isArray(localList) && localList.length > 0) {
+              const localMap = new Map<string, any>(
+                localList.map((p: any) => [p.title?.toLowerCase()?.trim(), p])
+              );
+              validSlides = validSlides.map((sl: any) => {
+                if (!sl.mrp && sl.title) {
+                  const match = localMap.get(sl.title.toLowerCase().trim());
+                  if (match && match.mrp) {
+                    return { ...sl, mrp: match.mrp };
+                  }
+                }
+                return sl;
+              });
+            }
+          }
+        }
+      } catch {}
+
       if (validSlides.length === 1) {
         return {
           ...manifestData,
@@ -612,7 +637,7 @@ export default function TvPlayerPage() {
   }, []);
 
   // Manifest Fetching (User Screen Display Mode — No Pairing Required)
-  const fetchManifest = useCallback(async () => {
+  const fetchManifest = useCallback(async (jumpToFirst = false) => {
     try {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -627,7 +652,12 @@ export default function TvPlayerPage() {
         setManifest(data);
         localStorage.setItem("signage_cached_manifest", JSON.stringify(data));
         setIsOffline(false);
-        setCurrentIndex((prev) => (data.slides && data.slides.length > 0 && prev < data.slides.length ? prev : 0));
+        if (jumpToFirst) {
+          setCurrentIndex(0);
+          setSlideProgress(0);
+        } else {
+          setCurrentIndex((prev) => (data.slides && data.slides.length > 0 && prev < data.slides.length ? prev : 0));
+        }
         return;
       }
     } catch {
@@ -640,7 +670,12 @@ export default function TvPlayerPage() {
       const base = cached ? JSON.parse(cached) : FALLBACK_MANIFEST;
       const enriched = enrichWithLocalPromotions(base);
       setManifest(enriched);
-      setCurrentIndex((prev) => (enriched.slides && enriched.slides.length > 0 && prev < enriched.slides.length ? prev : 0));
+      if (jumpToFirst) {
+        setCurrentIndex(0);
+        setSlideProgress(0);
+      } else {
+        setCurrentIndex((prev) => (enriched.slides && enriched.slides.length > 0 && prev < enriched.slides.length ? prev : 0));
+      }
     } catch {}
   }, [token, enrichWithLocalPromotions]);
 
@@ -664,7 +699,7 @@ export default function TvPlayerPage() {
           const data = await res.json();
           if (data.version && data.version !== manifestVersionRef.current) {
             manifestVersionRef.current = data.version;
-            fetchManifest();
+            fetchManifest(true);
           }
           if (typeof data.is_paused === "boolean" && data.is_paused !== isPausedRef.current) {
             isPausedRef.current = data.is_paused;
@@ -693,7 +728,7 @@ export default function TvPlayerPage() {
       syncChannel = new BroadcastChannel("kathua_tv_sync");
       syncChannel.onmessage = (event) => {
         if (event.data?.type === "TV_SYNC" || event.data?.type === "SYNC_OFFERS") {
-          fetchManifest();
+          fetchManifest(true);
         } else if (event.data?.type === "PAUSE_TV") {
           setIsPaused(true);
         } else if (event.data?.type === "RESUME_TV") {

@@ -532,22 +532,20 @@ export default function EditOfferModal({
               {/* Tab 1: Upload & Camera Buttons */}
               {imageTab === "upload" && (
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={triggerChooseFile}
+                  <label
+                    htmlFor="edit-offer-file-input"
                     className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                   >
                     <Upload className="w-4 h-4 shrink-0" />
                     <span>Choose from Files / Gallery</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={triggerCamera}
+                  </label>
+                  <label
+                    htmlFor="edit-offer-camera-input"
                     className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                   >
                     <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>Take New Photo (Camera)</span>
-                  </button>
+                  </label>
                   <div className="col-span-2 pt-1 flex items-center justify-center">
                     <button
                       type="button"

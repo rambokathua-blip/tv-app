@@ -3,6 +3,7 @@ import {
   requireDevice,
   successResponse,
   errorResponse,
+  unpackPromotionNotes,
 } from "@/lib/signage/api-utils";
 import { NextResponse } from "next/server";
 
@@ -44,6 +45,37 @@ export async function GET(request: Request) {
         }
       } catch {}
 
+      // Ensure slides have their mrp resolved from promotions notes if missing in old snapshot
+      if (snap.slides && Array.isArray(snap.slides)) {
+        try {
+          const { data: dbPromos } = await admin
+            .from("signage_promotions")
+            .select("id, mrp, notes, price_text");
+          if (dbPromos && dbPromos.length > 0) {
+            const promoMap = new Map<string, any>(dbPromos.map((p) => [p.id, p]));
+            snap.slides = snap.slides.map((sl: any) => {
+              const dbP = promoMap.get(sl.promotion_id || sl.id);
+              const meta = unpackPromotionNotes(dbP?.notes);
+              let mrp = sl.mrp || dbP?.mrp || meta.mrp || null;
+
+              if (!mrp && (sl.price_text || dbP?.price_text)) {
+                const targetText = sl.price_text || dbP?.price_text;
+                const match = targetText.match(/mrp[:\s]*([0-9₹\s\w/]+?)(?:today|deal|offer|price|@|$)/i);
+                if (match) {
+                  const val = match[1].trim();
+                  mrp = val.startsWith("₹") ? val : `₹${val}`;
+                }
+              }
+
+              return {
+                ...sl,
+                mrp,
+              };
+            });
+          }
+        } catch {}
+      }
+
       return NextResponse.json(snap, {
         status: 200,
         headers: {
@@ -75,20 +107,24 @@ export async function GET(request: Request) {
       .order("position");
 
     if (dbPromos && dbPromos.length > 0) {
-      const liveSlides = dbPromos.map((p: any) => ({
-        id: p.id,
-        promotion_id: p.id,
-        title: p.title || "Offer",
-        price_text: p.price_text,
-        mrp: p.mrp || null,
-        duration_sec: p.duration_sec || 8,
-        image_url:
-          p.media?.storage_path ||
-          p.media?.thumb_path ||
-          (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
-          p.media_id ||
-          "/kathua-fresh-logo.jpg",
-      }));
+      const liveSlides = dbPromos.map((p: any) => {
+        const meta = unpackPromotionNotes(p.notes);
+        return {
+          id: p.id,
+          promotion_id: p.id,
+          title: p.title || "Offer",
+          price_text: p.price_text,
+          mrp: p.mrp || meta.mrp || null,
+          duration_sec: p.duration_sec || 8,
+          image_url:
+            p.media?.storage_path ||
+            p.media?.thumb_path ||
+            meta.img ||
+            (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
+            p.media_id ||
+            "/kathua-fresh-logo.jpg",
+        };
+      });
 
       const finalSlides =
         liveSlides.length === 1

@@ -5,6 +5,7 @@ import {
   errorResponse,
   parseBody,
   auditLog,
+  unpackPromotionNotes,
 } from "@/lib/signage/api-utils";
 import { publishSchema } from "@/lib/signage/schemas";
 import { devStore } from "@/lib/signage/dev-store";
@@ -72,9 +73,11 @@ export async function POST(request: Request) {
 
     // 3. Build slides array from Supabase data
     const promoSlides = (dbPromos || []).map((p: any) => {
+      const meta = unpackPromotionNotes(p.notes);
       const img =
         p.media?.storage_path ||
         p.media?.thumb_path ||
+        meta.img ||
         (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
         p.media_id ||
         "/kathua-fresh-logo.jpg";
@@ -83,7 +86,7 @@ export async function POST(request: Request) {
         promotion_id: p.id,
         title: p.title || "Offer",
         price_text: p.price_text,
-        mrp: p.mrp || null,
+        mrp: p.mrp || meta.mrp || null,
         duration_sec: p.duration_sec || 8,
         image_url: img,
       };
