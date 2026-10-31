@@ -41,70 +41,29 @@ export default function OffersManagePage() {
   const [deleteTarget, setDeleteTarget] = useState<Promotion | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Fetch promotions from API — always preserve local image and update localStorage with server truth
+  // Fetch promotions from API — server truth is authoritative
   const loadPromotions = async () => {
     try {
       const res = await fetch("/api/signage/admin/promotions");
       if (res.ok) {
         const data = await res.json();
-        if (data.promotions && data.promotions.length > 0) {
-          // Merge with localStorage to guarantee images and newly created offers are NEVER lost on refresh
-          let cachedList: Promotion[] = [];
-          try {
-            const cached = localStorage.getItem("kathua_signage_promotions");
-            if (cached) cachedList = JSON.parse(cached);
-          } catch {}
-
-          const serverIds = new Set(data.promotions.map((p: Promotion) => p.id));
-          // Keep all locally created promotions that haven't been confirmed by the server yet
-          const localOnly = cachedList.filter((c) => !serverIds.has(c.id));
-
-          const serverEnriched = data.promotions.map((p: Promotion) => {
-            const fromCache = cachedList.find((c) => c.id === p.id);
-            const hasRealImage =
-              p.media_id &&
-              p.media_id !== "/kathua-fresh-logo.jpg" &&
-              (p.media_id.startsWith("data:") || p.media_id.startsWith("http") || p.media_id.startsWith("/"));
-
-            if (!hasRealImage) {
-              if (fromCache?.media_id && fromCache.media_id !== "/kathua-fresh-logo.jpg") {
-                return {
-                  ...p,
-                  media_id: fromCache.media_id,
-                  media: fromCache.media || {
-                    id: fromCache.media_id,
-                    storage_path: fromCache.media_id,
-                    thumb_path: fromCache.media_id,
-                  },
-                };
-              }
+        if (data.promotions) {
+          // Deduplicate defensively so UI never shows duplicate rows
+          const seenIds = new Set<string>();
+          const seenKeys = new Set<string>();
+          const uniquePromos: Promotion[] = [];
+          for (const p of data.promotions) {
+            const contentKey = `${(p.title || "").trim().toLowerCase()}:::${(p.price_text || "").trim().toLowerCase()}`;
+            if (!seenIds.has(p.id) && !seenKeys.has(contentKey)) {
+              seenIds.add(p.id);
+              seenKeys.add(contentKey);
+              uniquePromos.push(p);
             }
-            return p;
-          });
-
-          const merged = [...localOnly, ...serverEnriched];
-          setPromotions(merged);
-          try {
-            localStorage.setItem("kathua_signage_promotions", JSON.stringify(merged));
-          } catch {}
-
-          // Background sync any local-only promotions to server so other devices get them
-          if (localOnly.length > 0) {
-            localOnly.forEach((lo) => {
-              fetch("/api/signage/admin/promotions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  title: lo.title,
-                  price_text: lo.price_text,
-                  media_id: lo.media_id,
-                  duration_sec: lo.duration_sec,
-                  status: lo.status,
-                  enabled: lo.enabled,
-                }),
-              }).catch(() => {});
-            });
           }
+          setPromotions(uniquePromos);
+          try {
+            localStorage.setItem("kathua_signage_promotions", JSON.stringify(uniquePromos));
+          } catch {}
         }
       }
     } catch {
