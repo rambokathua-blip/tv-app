@@ -52,37 +52,39 @@ class DevStore {
       const filePath = getStoreFilePath();
       if (fs.existsSync(filePath)) {
         const raw = fs.readFileSync(filePath, "utf-8");
-        const data = JSON.parse(raw);
-        if (data.promotions && Array.isArray(data.promotions)) {
-          this.promotions = data.promotions.filter(
-            (p: any) => p && p.id !== "demo-onion" && p.id !== "demo-apple"
-          );
-        }
-        if (data.playlist && Array.isArray(data.playlist)) {
-          this.playlist = data.playlist.filter(
-            (item: any) => item && item.promotion_id !== "demo-onion" && item.promotion_id !== "demo-apple"
-          );
-        }
-        if (data.branding) {
-          this.branding = data.branding;
-        }
-        if (data.qrCodes && Array.isArray(data.qrCodes) && data.qrCodes.length > 0) {
-          this.qrCodes = data.qrCodes;
-        }
-        if (data.mediaMap && typeof data.mediaMap === "object") {
-          this.mediaMap = { ...this.mediaMap, ...data.mediaMap };
-        }
-        if (data.audioSettings) {
-          this.audioSettings = data.audioSettings;
-        }
-        if (data.voiceSettings) {
-          this.voiceSettings = data.voiceSettings;
-        }
-        if (data.announcements && Array.isArray(data.announcements) && data.announcements.length > 0) {
-          this.announcements = data.announcements;
-        }
-        if (typeof data.version === "number") {
-          this.version = data.version;
+        if (raw && raw.trim()) {
+          const data = JSON.parse(raw);
+          if (data.promotions && Array.isArray(data.promotions)) {
+            this.promotions = data.promotions.filter(
+              (p: any) => p && p.id !== "demo-onion" && p.id !== "demo-apple"
+            );
+          }
+          if (data.playlist && Array.isArray(data.playlist)) {
+            this.playlist = data.playlist.filter(
+              (item: any) => item && item.promotion_id !== "demo-onion" && item.promotion_id !== "demo-apple"
+            );
+          }
+          if (data.branding) {
+            this.branding = data.branding;
+          }
+          if (data.qrCodes && Array.isArray(data.qrCodes) && data.qrCodes.length > 0) {
+            this.qrCodes = data.qrCodes;
+          }
+          if (data.mediaMap && typeof data.mediaMap === "object") {
+            this.mediaMap = { ...this.mediaMap, ...data.mediaMap };
+          }
+          if (data.audioSettings) {
+            this.audioSettings = data.audioSettings;
+          }
+          if (data.voiceSettings) {
+            this.voiceSettings = data.voiceSettings;
+          }
+          if (data.announcements && Array.isArray(data.announcements) && data.announcements.length > 0) {
+            this.announcements = data.announcements;
+          }
+          if (typeof data.version === "number") {
+            this.version = data.version;
+          }
         }
       }
     } catch (err) {

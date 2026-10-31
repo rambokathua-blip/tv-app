@@ -14,15 +14,15 @@ export const promotionStatusEnum = z.enum([
 ]);
 
 export const createPromotionSchema = z.object({
-  title: z.string().min(1).max(200),
-  price_text: z.string().max(100).optional().nullable(),
+  title: z.string().min(1).max(500),
+  price_text: z.string().max(200).optional().nullable(),
   media_id: z.string().optional().nullable(),
-  duration_sec: z.number().int().min(3).max(60).default(10),
+  duration_sec: z.number().int().min(1).max(300).default(10),
   starts_at: z.string().optional().nullable(),
   ends_at: z.string().optional().nullable(),
   status: promotionStatusEnum.default("draft"),
   enabled: z.boolean().default(true),
-  notes: z.string().max(500).optional().nullable(),
+  notes: z.string().optional().nullable(),
 });
 
 export const updatePromotionSchema = createPromotionSchema.partial();
@@ -149,7 +149,7 @@ export const sendCommandSchema = z.object({
 // ============================================================
 
 export const publishSchema = z.object({
-  note: z.string().max(500).optional(),
+  note: z.string().optional(),
 });
 
 export const rollbackSchema = z.object({

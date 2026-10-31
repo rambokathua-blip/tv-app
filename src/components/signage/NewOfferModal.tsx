@@ -291,13 +291,18 @@ export default function NewOfferModal({
           ends_at: endsAt ? new Date(endsAt).toISOString() : null,
           status: publishImmediately ? "live" : "draft",
           enabled: true,
-          notes: finalMediaId?.startsWith("data:") ? `IMG:${finalMediaId}` : null,
+          notes: null,
         }),
       });
 
       if (!promoRes.ok) {
         const errData = await promoRes.json().catch(() => ({}));
-        throw new Error(errData.message || "Failed to create promotion");
+        const errMessage =
+          errData.error?.message ||
+          errData.message ||
+          (typeof errData.error === "string" ? errData.error : null) ||
+          "Failed to create promotion";
+        throw new Error(errMessage);
       }
 
       const promoData = await promoRes.json();
