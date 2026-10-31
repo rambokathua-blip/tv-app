@@ -91,21 +91,46 @@ export default function QrCodesManagePage() {
     );
   };
 
+  const persistQrList = async (list: QrCodeType[]) => {
+    setIsSaving(true);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("kathua_tv_qrs", JSON.stringify(list));
+        localStorage.setItem("signage_force_refresh", Date.now().toString());
+      }
+      await fetch("/api/signage/admin/qr", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(list),
+      });
+
+      // Broadcast instant sync to live TV
+      try {
+        const syncChannel = new BroadcastChannel("kathua_tv_sync");
+        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+        syncChannel.close();
+      } catch {}
+
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const deleteQr = async (id: string) => {
     if (qrList.length <= 1) {
       alert("At least 1 QR code is recommended for TV display.");
       return;
     }
-    setQrList((prev) => prev.filter((item) => item.id !== id));
-    try {
-      await fetch(`/api/signage/admin/qr?id=${id}`, { method: "DELETE" });
-      const syncChannel = new BroadcastChannel("kathua_tv_sync");
-      syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
-      syncChannel.close();
-    } catch {}
+    const updated = qrList.filter((item) => item.id !== id);
+    setQrList(updated);
+    await persistQrList(updated);
   };
 
-  const handleAddQr = () => {
+  const handleAddQr = async () => {
     if (!newLabel.trim() || !newUrl.trim()) return;
     const newQr: QrCodeType = {
       id: "qr-" + Date.now(),
@@ -116,37 +141,17 @@ export default function QrCodesManagePage() {
       enabled: true,
       created_at: new Date().toISOString(),
     };
-    setQrList((prev) => [...prev, newQr]);
+    const updated = [...qrList, newQr];
+    setQrList(updated);
     setNewLabel("");
     setNewUrl("");
     setNewCaption("");
     setShowAddModal(false);
+    await persistQrList(updated);
   };
 
   const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch("/api/signage/admin/qr", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(qrList),
-      });
-
-      // Broadcast instant sync to live TV
-      try {
-        const syncChannel = new BroadcastChannel("kathua_tv_sync");
-        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
-        syncChannel.close();
-        localStorage.setItem("signage_force_refresh", Date.now().toString());
-      } catch {}
-
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSaving(false);
-    }
+    await persistQrList(qrList);
   };
 
   return (
