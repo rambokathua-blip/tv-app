@@ -385,6 +385,7 @@ class DevStore {
         id,
         title: updates.title || "Offer",
         price_text: updates.price_text,
+        mrp: updates.mrp || null,
         duration_sec: updates.duration_sec || 10,
         status: updates.status || "live",
         enabled: updates.enabled ?? true,
@@ -458,6 +459,7 @@ class DevStore {
           promotion_id: promo.id,
           title: promo.title,
           price_text: promo.price_text,
+          mrp: promo.mrp || null,
           duration_sec:
             item.duration_override_sec || promo.duration_sec || 10,
           image_url: imgUrl,
@@ -493,6 +495,7 @@ class DevStore {
           promotion_id: promo.id,
           title: promo.title,
           price_text: promo.price_text,
+          mrp: promo.mrp || null,
           duration_sec: promo.duration_sec || 10,
           image_url: imgUrl,
         };
