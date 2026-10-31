@@ -38,7 +38,30 @@ export async function GET(request: Request) {
 
       const { data, error } = await query;
       if (!error && data) {
-        return successResponse({ promotions: data, data });
+        devStore.load();
+        const enriched = data.map((promo: any) => {
+          let img =
+            promo.media?.storage_path ||
+            promo.media?.thumb_path ||
+            (promo.notes?.startsWith("IMG:") ? promo.notes.slice(4) : null) ||
+            (promo.media_id && (promo.media_id.startsWith("data:") || promo.media_id.startsWith("http") || promo.media_id.startsWith("/")) ? promo.media_id : null);
+
+          if (!img && promo.media_id && devStore.mediaMap?.[promo.media_id]) {
+            img = devStore.mediaMap[promo.media_id];
+          }
+
+          if (img) {
+            promo.media_id = img;
+            promo.media = {
+              ...(promo.media || {}),
+              id: promo.media?.id || "media-resolved",
+              storage_path: img,
+              thumb_path: img,
+            };
+          }
+          return promo;
+        });
+        return successResponse({ promotions: enriched, data: enriched });
       }
     } catch {
       // fallback
@@ -67,37 +90,92 @@ export async function POST(request: Request) {
   if (hasRealSupabaseKey) {
     try {
       const admin = createAdminClient();
-    const isValidUUID =
-      parsed.data.media_id &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        parsed.data.media_id
+      let mediaUuid: string | null = null;
+      const customImg = parsed.data.media_id;
+
+      if (customImg) {
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customImg)) {
+          mediaUuid = customImg;
+        } else {
+          // Store custom data URI / URL in signage_media to get a valid foreign key UUID
+          try {
+            const { data: mediaRec } = await admin
+              .from("signage_media")
+              .insert({
+                kind: "image",
+                storage_path: customImg,
+                mime: customImg.startsWith("data:image/png") ? "image/png" : "image/jpeg",
+                bytes: customImg.length,
+                sha256: "custom-" + Date.now(),
+                created_by: auth.claims.sub,
+                thumb_path: customImg,
+              })
+              .select("id")
+              .single();
+            if (mediaRec?.id) {
+              mediaUuid = mediaRec.id;
+            }
+          } catch (mediaErr) {
+            console.warn("Signage media creation fallback:", mediaErr);
+          }
+        }
+      }
+
+      const dbPayload = {
+        ...parsed.data,
+        media_id: mediaUuid,
+        notes: customImg ? `IMG:${customImg}` : parsed.data.notes,
+        created_by: auth.claims.sub,
+      };
+
+      const insertPromise = admin
+        .from("signage_promotions")
+        .insert(dbPayload)
+        .select()
+        .single();
+
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error("DB timeout") }), 3000)
       );
 
-    const dbPayload = {
-      ...parsed.data,
-      media_id: isValidUUID ? parsed.data.media_id : null,
-      created_by: auth.claims.sub,
-    };
+      const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
 
-    const insertPromise = admin
-      .from("signage_promotions")
-      .insert(dbPayload)
-      .select()
-      .single();
+      if (!error && data) {
+        await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
 
-    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: new Error("DB timeout") }), 2500)
-    );
+        // Also add to default playlist in Supabase
+        try {
+          const { data: defaultPl } = await admin
+            .from("signage_playlists")
+            .select("id")
+            .eq("is_default", true)
+            .single();
+          if (defaultPl) {
+            await admin.from("signage_playlist_items").insert({
+              playlist_id: defaultPl.id,
+              promotion_id: data.id,
+              position: 1,
+              enabled: true,
+            });
+          }
+        } catch {}
 
-    const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
+        // Also save to devStore so both stores are 100% in sync
+        devStore.addPromotion({
+          ...parsed.data,
+          status: parsed.data.status || "live",
+          enabled: parsed.data.enabled ?? true,
+        });
 
-    if (!error && data) {
-      await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
-      if (!isValidUUID && parsed.data.media_id) {
-        data.media_id = parsed.data.media_id;
+        data.media_id = customImg || mediaUuid || data.media_id;
+        data.media = {
+          id: mediaUuid || "media-custom",
+          storage_path: customImg || data.media_id,
+          thumb_path: customImg || data.media_id,
+        };
+
+        return successResponse({ promotion: data, ...data }, 201);
       }
-      return successResponse({ promotion: data, ...data }, 201);
-    }
     } catch (err) {
       console.warn("Supabase promotion create fallback:", err);
     }

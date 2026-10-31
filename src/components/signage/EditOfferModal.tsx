@@ -312,18 +312,33 @@ export default function EditOfferModal({
       }
 
       const updatedPromoData = await res.json().catch(() => null);
-      if (updatedPromoData) {
-        try {
-          const cached = localStorage.getItem("kathua_signage_promotions");
-          const list = cached ? JSON.parse(cached) : [];
-          if (Array.isArray(list)) {
-            const updated = list.map((p: any) =>
-              p.id === promo.id ? { ...p, ...updatedPromoData, media_id: finalMediaId } : p
-            );
-            localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
-          }
-        } catch {}
-      }
+
+      try {
+        const cached = localStorage.getItem("kathua_signage_promotions");
+        const list = cached ? JSON.parse(cached) : [];
+        if (Array.isArray(list)) {
+          const updated = list.map((p: any) =>
+            p.id === promo.id
+              ? {
+                  ...p,
+                  ...(updatedPromoData?.promotion || updatedPromoData || {}),
+                  title: title.trim(),
+                  price_text: priceText.trim() || null,
+                  duration_sec: durationSec,
+                  status,
+                  enabled: status === "live",
+                  media_id: finalMediaId || p.media_id,
+                  media: {
+                    id: finalMediaId || p.media_id,
+                    storage_path: finalMediaId || p.media_id,
+                    thumb_path: finalMediaId || p.media_id,
+                  },
+                }
+              : p
+          );
+          localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
+        }
+      } catch {}
 
       // Trigger publish so TV updates immediately
       await fetch("/api/signage/admin/publish", {

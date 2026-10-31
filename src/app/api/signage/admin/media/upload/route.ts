@@ -61,53 +61,40 @@ export async function POST(request: Request) {
     Boolean(process.env.SUPABASE_SECRET_KEY) &&
     !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
 
+  // Generate self-contained Base64 data URI (100% resilient across Vercel serverless, APK, offline TV)
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const dataUri = `data:${mime};base64,${base64}`;
+  let mediaId = "media-" + crypto.randomUUID();
+
   if (hasRealSupabaseKey) {
     try {
       const admin = createAdminClient();
-      // Upload to Supabase Storage with 3s timeout
-      const uploadPromise = admin.storage
-        .from("signage-media")
-        .upload(storagePath, arrayBuffer, {
-          contentType: mime,
-          upsert: false,
-        });
+      const { data: media, error: dbError } = await admin
+        .from("signage_media")
+        .insert({
+          kind,
+          storage_path: dataUri,
+          mime,
+          bytes: file.size,
+          width,
+          height,
+          sha256,
+          thumb_path: dataUri,
+          created_by: auth.claims.sub,
+        })
+        .select()
+        .single();
 
-      const timeoutPromise = new Promise<{ error: Error }>((resolve) =>
-        setTimeout(() => resolve({ error: new Error("Storage timeout") }), 3000)
-      );
-
-      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
-
-      if (!uploadError) {
-        const { data: media, error: dbError } = await admin
-          .from("signage_media")
-          .insert({
-            kind,
-            storage_path: storagePath,
-            mime,
-            bytes: file.size,
-            width,
-            height,
-            sha256,
-            created_by: auth.claims.sub,
-          })
-          .select()
-          .single();
-
-        if (!dbError && media) {
-          finalMedia = media;
-        }
+      if (!dbError && media) {
+        finalMedia = media;
+        mediaId = media.id;
       }
     } catch {
-      // Supabase storage bucket or table unmigrated
+      // Supabase unmigrated or down
     }
   }
 
   if (!finalMedia) {
-    // Generate self-contained Base64 data URI (100% resilient across Vercel serverless, APK, offline TV)
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
-    const dataUri = `data:${mime};base64,${base64}`;
-    const mediaId = "media-" + crypto.randomUUID();
     finalMedia = {
       id: mediaId,
       kind,
@@ -120,29 +107,21 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
       thumb_path: dataUri,
     };
-    devStore.setMedia(mediaId, dataUri);
-    devStore.setMedia(dataUri, dataUri);
-
-    return successResponse({
-      media: finalMedia,
-      ...finalMedia,
-      public_url: dataUri,
-      storage_path: dataUri,
-      data_uri: dataUri,
-    }, 201);
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const publicUrl = `${supabaseUrl}/storage/v1/object/public/signage-media/${storagePath}`;
-
-  devStore.setMedia(finalMedia.id, publicUrl);
-  devStore.setMedia(publicUrl, publicUrl);
+  devStore.setMedia(mediaId, dataUri);
+  devStore.setMedia(dataUri, dataUri);
 
   return successResponse({
     media: finalMedia,
     ...finalMedia,
-    public_url: publicUrl,
+    id: mediaId,
+    public_url: dataUri,
+    storage_path: dataUri,
+    data_uri: dataUri,
   }, 201);
+
+
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return errorResponse("SERVER_ERROR", msg, 500);

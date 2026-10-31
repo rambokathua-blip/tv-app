@@ -11,6 +11,25 @@ import type {
 } from "./types";
 
 function getStoreFilePath(): string {
+  // If running on Vercel, AWS Lambda, or production container, process.cwd() is strictly read-only.
+  // Writing to process.cwd() throws EROFS. Always use /tmp in serverless/production.
+  if (
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NODE_ENV === "production"
+  ) {
+    const tmpPath = path.join("/tmp", "signage-store.json");
+    if (!fs.existsSync(tmpPath)) {
+      try {
+        const seedPath = path.join(process.cwd(), "data", "signage-store.json");
+        if (fs.existsSync(seedPath)) {
+          fs.copyFileSync(seedPath, tmpPath);
+        }
+      } catch {}
+    }
+    return tmpPath;
+  }
+
   try {
     const dataDir = path.join(process.cwd(), "data");
     if (!fs.existsSync(dataDir)) {
@@ -68,23 +87,29 @@ class DevStore {
   }
 
   save() {
+    const payload = {
+      version: this.version,
+      promotions: this.promotions,
+      playlist: this.playlist,
+      branding: this.branding,
+      qrCodes: this.qrCodes,
+      mediaMap: this.mediaMap,
+      audioSettings: this.audioSettings,
+      voiceSettings: this.voiceSettings,
+      announcements: this.announcements,
+      updated_at: new Date().toISOString(),
+    };
     try {
       const filePath = getStoreFilePath();
-      const payload = {
-        version: this.version,
-        promotions: this.promotions,
-        playlist: this.playlist,
-        branding: this.branding,
-        qrCodes: this.qrCodes,
-        mediaMap: this.mediaMap,
-        audioSettings: this.audioSettings,
-        voiceSettings: this.voiceSettings,
-        announcements: this.announcements,
-        updated_at: new Date().toISOString(),
-      };
       fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
     } catch (err) {
-      console.warn("DevStore save warning:", err);
+      console.warn("DevStore save initial path failed, attempting /tmp fallback:", err);
+      try {
+        const tmpPath = path.join("/tmp", "signage-store.json");
+        fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), "utf-8");
+      } catch (tmpErr) {
+        console.warn("DevStore tmp save failed:", tmpErr);
+      }
     }
   }
 
@@ -483,7 +508,42 @@ class DevStore {
           image_url: imgUrl,
         };
       })
-      .filter(Boolean);
+      .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+    // Also include any active live promotions that aren't yet in playlist
+    const playlistPromoIds = new Set(activePromos.map((p) => p.id));
+    const livePromosNotInPlaylist = this.promotions
+      .filter((p) => p.enabled !== false && p.status === "live" && !playlistPromoIds.has(p.id))
+      .map((promo) => {
+        let imgUrl =
+          (promo.media_id && (promo.media_id.startsWith("/") || promo.media_id.startsWith("http") || promo.media_id.startsWith("data:"))
+            ? promo.media_id
+            : null) ||
+          (promo.media?.thumb_path && !promo.media.thumb_path.includes("photo-1610832958506-aa56368176cf")
+            ? promo.media.thumb_path
+            : null) ||
+          (promo.media?.storage_path && promo.media.storage_path !== "demo"
+            ? promo.media.storage_path
+            : null) ||
+          promo.media?.thumb_path ||
+          promo.media_id ||
+          "/kathua-fresh-logo.jpg";
+
+        if (imgUrl && this.mediaMap && this.mediaMap[imgUrl]) {
+          imgUrl = this.mediaMap[imgUrl];
+        }
+
+        return {
+          id: promo.id,
+          promotion_id: promo.id,
+          title: promo.title,
+          price_text: promo.price_text,
+          duration_sec: promo.duration_sec || 10,
+          image_url: imgUrl,
+        };
+      });
+
+    const allSlides = [...activePromos, ...livePromosNotInPlaylist];
 
     return {
       version: this.version,
@@ -497,7 +557,7 @@ class DevStore {
         layout_profile: this.branding.layout_profile,
       },
       qr_codes: this.qrCodes.filter((q) => q.enabled),
-      slides: activePromos as any,
+      slides: allSlides as any,
       voice: {
         settings: this.voiceSettings || {
           master_enabled: true,
