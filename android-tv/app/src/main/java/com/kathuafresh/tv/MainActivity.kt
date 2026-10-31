@@ -195,44 +195,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 try {
                     val isCapture = fileChooserParams?.isCaptureEnabled == true
-                    val cameraIntent = createCameraIntent()
-
-                    // If user clicked "Take Photo (Camera)" directly (capture attribute enabled)
-                    if (isCapture) {
-                        startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST_CODE)
-                        return true
-                    }
-
-                    // Otherwise, provide user with bottom sheet containing BOTH Camera and Gallery/Files
-                    val extraIntents = mutableListOf<Intent>()
-                    extraIntents.add(cameraIntent)
-
-                    val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
-                        type = "image/*"
-                    }
-                    extraIntents.add(galleryIntent)
-
-                    var baseIntent = fileChooserParams?.createIntent()
-                    if (baseIntent == null) {
-                        baseIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "image/*"
-                        }
-                    }
-
-                    val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
-                        putExtra(Intent.EXTRA_INTENT, baseIntent)
-                        putExtra(Intent.EXTRA_TITLE, "Select Offer Image / Camera")
-                        putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toTypedArray())
-                    }
+                    val chooserIntent = buildChooserIntent(isCapture)
                     startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
                     return true
                 } catch (e: Exception) {
                     try {
-                        val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                        val simplePicker = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
                             type = "image/*"
                         }
-                        startActivityForResult(galleryIntent, FILE_CHOOSER_REQUEST_CODE)
+                        startActivityForResult(simplePicker, FILE_CHOOSER_REQUEST_CODE)
                         return true
                     } catch (e2: Exception) {
                         fileUploadCallback?.onReceiveValue(null)
@@ -242,6 +214,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
         }
+    }
+
+    private fun buildChooserIntent(isCameraOnly: Boolean): Intent {
+        val cameraIntent = createCameraIntent()
+        if (isCameraOnly) {
+            return cameraIntent
+        }
+        val galleryIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        val pickIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+            type = "image/*"
+        }
+        val extraIntents = mutableListOf<Intent>()
+        if (cameraIntent.resolveActivity(packageManager) != null) {
+            extraIntents.add(cameraIntent)
+        }
+        extraIntents.add(pickIntent)
+
+        val chooser = Intent(Intent.ACTION_CHOOSER).apply {
+            putExtra(Intent.EXTRA_INTENT, galleryIntent)
+            putExtra(Intent.EXTRA_TITLE, "Select Offer Photo / Camera")
+            putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toTypedArray())
+        }
+        return chooser
     }
 
     private fun createCameraImageFile(): File {
@@ -411,7 +409,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         fun openImagePicker() {
             runOnUiThread {
                 try {
-                    val chooser = buildImageChooserIntent(null)
+                    val chooser = buildChooserIntent(false)
                     startActivityForResult(chooser, FILE_CHOOSER_REQUEST_CODE)
                 } catch (e: Exception) {
                     Toast.makeText(this@MainActivity, "Opening Gallery...", Toast.LENGTH_SHORT).show()
@@ -423,7 +421,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         fun openCamera() {
             runOnUiThread {
                 try {
-                    val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                    val cameraIntent = buildChooserIntent(true)
                     startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST_CODE)
                 } catch (e: Exception) {
                     Toast.makeText(this@MainActivity, "Opening Camera...", Toast.LENGTH_SHORT).show()

@@ -45,6 +45,18 @@ export async function GET(request: Request) {
       .eq("enabled", true)
       .order("created_at", { ascending: false });
 
+    const { data: dbBranding } = await admin
+      .from("signage_branding")
+      .select("*")
+      .limit(1)
+      .single();
+
+    const { data: dbQrs } = await admin
+      .from("signage_qr_codes")
+      .select("*")
+      .eq("enabled", true)
+      .order("position");
+
     if (dbPromos && dbPromos.length > 0) {
       const liveSlides = dbPromos.map((p: any) => ({
         id: p.id,
@@ -75,32 +87,40 @@ export async function GET(request: Request) {
             ]
           : liveSlides;
 
+      const effectiveBranding = {
+        logo_url: dbBranding?.logo_url || "/kathua-fresh-logo.jpg",
+        website_text: dbBranding?.website_text || "www.kathuafresh.in",
+        tagline: dbBranding?.tagline || "Quality Assured | Always Fresh",
+        ticker_text:
+          dbBranding?.ticker_text ||
+          "Welcome to Kathua Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Quality Guaranteed",
+        ticker_enabled: dbBranding?.ticker_enabled ?? true,
+        layout_profile: dbBranding?.layout_profile || "standard",
+      };
+
+      const effectiveQrs =
+        dbQrs && dbQrs.length > 0
+          ? dbQrs
+          : [
+              {
+                id: "qr-wa",
+                label: "WhatsApp Channel",
+                target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
+                caption: "Join for daily wholesale rates & deals",
+              },
+              {
+                id: "qr-ig",
+                label: "Instagram",
+                target_url: "https://www.instagram.com/kathua_fresh/",
+                caption: "Follow @kathua_fresh for daily offers",
+              },
+            ];
+
       return NextResponse.json(
         {
           version: 1,
-          branding: {
-            logo_url: "/kathua-fresh-logo.jpg",
-            website_text: "www.kathuafresh.in",
-            tagline: "Quality Assured | Always Fresh",
-            ticker_text:
-              "Welcome to Kathua Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Quality Guaranteed",
-            ticker_enabled: true,
-            layout_profile: "standard",
-          },
-          qr_codes: [
-            {
-              id: "qr-wa",
-              label: "WhatsApp Channel",
-              target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
-              caption: "Join for daily wholesale rates & deals",
-            },
-            {
-              id: "qr-ig",
-              label: "Instagram",
-              target_url: "https://www.instagram.com/kathua_fresh/",
-              caption: "Follow @kathua_fresh for daily offers",
-            },
-          ],
+          branding: effectiveBranding,
+          qr_codes: effectiveQrs,
           slides: finalSlides,
           audio: {
             enabled: true,

@@ -993,6 +993,26 @@ export default function TvPlayerPage() {
           willChange: isTransitioning ? "opacity, transform" : "auto",
         }}
       >
+        {/* Ambient Backlight Glow (OLED Aura) */}
+        {!isLogo && slide.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={slide.image_url}
+            alt=""
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: -60,
+              width: "calc(100% + 120px)",
+              height: "calc(100% + 120px)",
+              objectFit: "cover",
+              filter: "blur(45px) brightness(0.35)",
+              zIndex: 1,
+              pointerEvents: "none",
+            }}
+          />
+        )}
+
         {slide.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -1004,11 +1024,13 @@ export default function TvPlayerPage() {
               }
             }}
             style={{
+              position: "relative",
+              zIndex: 2,
               width: "100%",
               height: "100%",
               objectFit: isLogo ? "contain" : "cover",
               padding: isLogo ? "36px 48px" : "0",
-              animation: !isLogo && !isTransitioning && role === "static" ? "kenBurnsSlow 10s ease-out forwards" : undefined,
+              animation: !isLogo && !isTransitioning ? "kenBurnsCinematic 14s ease-in-out infinite alternate" : undefined,
               willChange: "transform",
             }}
           />
@@ -1030,26 +1052,53 @@ export default function TvPlayerPage() {
           </div>
         )}
 
-        {/* Price overlay banner */}
+        {/* Irresistible Animated Floating Price Badge */}
         {slide.price_text && (
           <div
             style={{
               position: "absolute",
-              bottom: 40,
-              left: 40,
-              backgroundColor: "rgba(15, 23, 42, 0.88)",
-              backdropFilter: "blur(12px)",
-              padding: "16px 36px",
-              borderRadius: 20,
-              border: "2px solid #22c55e",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
-              animation: isCurrent && isTransitioning ? "priceBadgeReveal 600ms cubic-bezier(0.16, 1, 0.3, 1) 200ms backwards" : undefined,
+              bottom: 44,
+              left: 44,
+              zIndex: 15,
+              background: "linear-gradient(135deg, rgba(15, 23, 42, 0.94) 0%, rgba(6, 40, 30, 0.94) 100%)",
+              backdropFilter: "blur(16px)",
+              padding: "18px 40px",
+              borderRadius: 24,
+              border: "2.5px solid #facc15",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.85), 0 0 35px rgba(250, 204, 21, 0.45)",
+              animation: "priceBadgeFloat 3.5s ease-in-out infinite, priceBadgeGlow 3s ease-in-out infinite",
             }}
           >
-            <div style={{ fontSize: 28, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>
-              {slide.title}
+            <div
+              style={{
+                fontSize: 26,
+                color: "#86efac",
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "#4ade80", boxShadow: "0 0 10px #4ade80" }} />
+              <span>{slide.title}</span>
             </div>
-            <div style={{ fontSize: 68, fontWeight: 900, color: "#facc15", letterSpacing: "-0.02em" }}>
+            <div
+              style={{
+                fontSize: 72,
+                fontWeight: 900,
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+                marginTop: 2,
+                background: "linear-gradient(90deg, #fef08a 0%, #facc15 35%, #ffffff 50%, #facc15 65%, #f59e0b 100%)",
+                backgroundSize: "200% auto",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                animation: "shimmerSweep 4s linear infinite",
+                textShadow: "0 4px 20px rgba(250, 204, 21, 0.4)",
+              }}
+            >
               {slide.price_text}
             </div>
           </div>
@@ -1057,6 +1106,10 @@ export default function TvPlayerPage() {
       </div>
     );
   };
+
+  const isImmersive = manifest.branding?.layout_profile === "immersive";
+  const promoWidth = isImmersive ? 1920 : 1500;
+  const promoHeight = isImmersive ? 960 : 844;
 
   return (
     <div
@@ -1092,15 +1145,15 @@ export default function TvPlayerPage() {
         }}
       >
       {/* ============================================================ */}
-      {/* ZONE A: PROMOTION AREA (1500 x 844, 16:9)                   */}
+      {/* ZONE A: PROMOTION AREA (1500 x 844 or Full 16:9 Immersive)   */}
       {/* ============================================================ */}
       <div
         style={{
           position: "absolute",
           top: 0,
           left: 0,
-          width: 1500,
-          height: 844,
+          width: promoWidth,
+          height: promoHeight,
           backgroundColor: "#000",
           overflow: "hidden",
         }}
@@ -1271,22 +1324,43 @@ export default function TvPlayerPage() {
       {/* ZONE B & C: CREATIVE BRAND & IRRESISTIBLE SMART QR SIDEBAR   */}
       {/* ============================================================ */}
       <div
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          width: 420,
-          height: 844,
-          background: "linear-gradient(180deg, #021a12 0%, #06281e 20%, #081d2a 60%, #05121b 100%)",
-          borderLeft: "2px solid rgba(34, 197, 94, 0.32)",
-          boxShadow: "-12px 0 35px rgba(0, 0, 0, 0.65), inset 1px 0 0 rgba(255, 255, 255, 0.08)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          padding: "16px 16px 14px",
-          overflow: "hidden",
-          zIndex: 20,
-        }}
+        style={
+          isImmersive
+            ? {
+                position: "absolute",
+                top: 24,
+                right: 24,
+                width: 380,
+                maxHeight: 880,
+                background: "linear-gradient(180deg, rgba(2, 26, 18, 0.88) 0%, rgba(6, 40, 30, 0.85) 40%, rgba(5, 18, 27, 0.94) 100%)",
+                border: "2px solid rgba(34, 197, 94, 0.45)",
+                borderRadius: 28,
+                boxShadow: "0 25px 60px rgba(0, 0, 0, 0.85), inset 1px 0 0 rgba(255, 255, 255, 0.15)",
+                backdropFilter: "blur(24px)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                padding: "16px 16px 14px",
+                overflow: "hidden",
+                zIndex: 30,
+              }
+            : {
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: 420,
+                height: 844,
+                background: "linear-gradient(180deg, #021a12 0%, #06281e 20%, #081d2a 60%, #05121b 100%)",
+                borderLeft: "2px solid rgba(34, 197, 94, 0.32)",
+                boxShadow: "-12px 0 35px rgba(0, 0, 0, 0.65), inset 1px 0 0 rgba(255, 255, 255, 0.08)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                padding: "16px 16px 14px",
+                overflow: "hidden",
+                zIndex: 20,
+              }
+        }
       >
         {/* Ambient Neon Glow Backlight */}
         <div
@@ -1510,7 +1584,7 @@ export default function TvPlayerPage() {
             gap: 12,
           }}
         >
-          {manifest.qr_codes?.slice(0, 2).map((qr) => {
+          {(manifest.qr_codes || []).filter((q: any) => q.enabled !== false).map((qr) => {
             const isWhatsApp =
               qr.label.toLowerCase().includes("whatsapp") ||
               qr.target_url.toLowerCase().includes("wa") ||
@@ -2342,386 +2416,203 @@ export default function TvPlayerPage() {
           {showQuickMenu ? <X size={22} /> : <MoreVertical size={22} />}
         </button>
 
-        {/* Quick Menu Flyout Popup */}
+        {/* 3-Dot Menu Slider Drawer from Right */}
         {showQuickMenu && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: "absolute",
-              top: 56,
-              right: 0,
-              width: 310,
-              backgroundColor: "rgba(15, 23, 42, 0.95)",
-              border: "1px solid rgba(34, 197, 94, 0.35)",
-              borderRadius: 24,
-              boxShadow: "0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(34, 197, 94, 0.2)",
-              backdropFilter: "blur(20px)",
-              padding: "16px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              color: "#fff",
-              fontFamily: "system-ui, -apple-system, sans-serif",
-              animation: "fadeIn 0.15s ease-out",
-            }}
-          >
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#fff", letterSpacing: "0.02em" }}>
-                  Kathua Fresh TV
-                </div>
-                <div style={{ fontSize: 11, color: "#86efac", fontWeight: 600 }}>
-                  Device & Control Hub
-                </div>
-              </div>
-              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, backgroundColor: "rgba(34, 197, 94, 0.2)", color: "#4ade80", fontWeight: 700 }}>
-                {token ? "PAIRED" : "PREVIEW"}
-              </span>
-            </div>
-
-            {/* Action 1: Open Admin Panel */}
-            <button
-              onClick={() => {
-                setShowQuickMenu(false);
-                if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
-                  (window as any).AndroidSignage.switchMode("admin");
-                } else {
-                  setShowConnectModal(true);
-                }
-              }}
+          <>
+            {/* Darkened Backdrop for outside-click close */}
+            <div
+              onClick={() => setShowQuickMenu(false)}
               style={{
+                position: "fixed",
+                inset: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.65)",
+                backdropFilter: "blur(8px)",
+                zIndex: 99998,
+                animation: "fadeIn 0.2s ease-out",
+              }}
+            />
+
+            {/* Slide-out Drawer Panel */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "fixed",
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 440,
+                maxWidth: "88vw",
+                backgroundColor: "rgba(10, 18, 30, 0.98)",
+                borderLeft: "2px solid rgba(34, 197, 94, 0.4)",
+                boxShadow: "-25px 0 70px rgba(0, 0, 0, 0.95), 0 0 40px rgba(34, 197, 94, 0.25)",
+                backdropFilter: "blur(30px)",
+                padding: "24px 20px",
                 display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 14px",
-                borderRadius: 16,
-                backgroundColor: "rgba(34, 197, 94, 0.14)",
-                border: "1px solid rgba(34, 197, 94, 0.35)",
-                color: "#86efac",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-                transition: "all 0.15s ease",
+                flexDirection: "column",
+                gap: 14,
+                color: "#fff",
+                fontFamily: "system-ui, -apple-system, sans-serif",
+                zIndex: 99999,
+                overflowY: "auto",
+                animation: "slideGlideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
             >
-              <Smartphone size={20} style={{ flexShrink: 0, color: "#4ade80" }} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
-                  Open Admin Mode (Upload Offers)
-                </div>
-                <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
-                  Manage offers & images on phone or device
-                </div>
-              </div>
-            </button>
-
-            {/* Action 2: Refresh Products & Sync Offers */}
-            <button
-              disabled={isSyncing}
-              onClick={async () => {
-                setIsSyncing(true);
-                try {
-                  await fetchManifest();
-                  setSyncToast("Products & Offers Synced!");
-                  setTimeout(() => setSyncToast(null), 3000);
-                } catch {
-                  window.location.reload();
-                } finally {
-                  setIsSyncing(false);
-                  setShowQuickMenu(false);
-                }
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 14px",
-                borderRadius: 16,
-                backgroundColor: "rgba(56, 189, 248, 0.14)",
-                border: "1px solid rgba(56, 189, 248, 0.35)",
-                color: "#38bdf8",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <RefreshCw size={20} style={{ flexShrink: 0, color: "#38bdf8" }} className={isSyncing ? "animate-spin" : ""} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
-                  {isSyncing ? "Syncing..." : "Refresh Products & Offers"}
-                </div>
-                <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
-                  Fetch latest new items & prices
-                </div>
-              </div>
-            </button>
-
-            {/* Action: Switch to 100% Live Mode (Hide Preview Banner) */}
-            {isPreview && (
-              <button
-                onClick={() => {
-                  const liveToken = "live-screen-" + Date.now();
-                  localStorage.setItem("signage_device_token", liveToken);
-                  setToken(liveToken);
-                  setIsPreview(false);
-                  setHidePreviewBanner(true);
-                  const cleanUrl = window.location.pathname;
-                  window.history.replaceState({}, document.title, cleanUrl);
-                  setShowQuickMenu(false);
-                  setSyncToast("Switched to 100% Live TV Mode!");
-                  setTimeout(() => setSyncToast(null), 3000);
-                }}
+              {/* Drawer Header */}
+              <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 12,
-                  padding: "12px 14px",
-                  borderRadius: 16,
-                  backgroundColor: "rgba(234, 88, 12, 0.16)",
-                  border: "1px solid rgba(234, 88, 12, 0.4)",
-                  color: "#fb923c",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  width: "100%",
-                  transition: "all 0.15s ease",
+                  justifyContent: "space-between",
+                  paddingBottom: 14,
+                  borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
                 }}
               >
-                <Tv size={20} style={{ flexShrink: 0, color: "#f97316" }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
-                    Go 100% Live (Remove Banner)
+                <div>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 900,
+                      color: "#ffffff",
+                      letterSpacing: "0.03em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Kathua Fresh TV Hub
                   </div>
-                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
-                    Hide orange &quot;Preview Mode&quot; badge
+                  <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, marginTop: 2 }}>
+                    Live TV Controller & Quick Settings
                   </div>
                 </div>
-              </button>
-            )}
-
-            {/* Action 3: Switch to Admin Mode */}
-            <button
-              onClick={() => {
-                setShowQuickMenu(false);
-                if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
-                  (window as any).AndroidSignage.switchMode("admin");
-                } else {
-                  window.location.href = "/admin/signage";
-                }
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 14px",
-                borderRadius: 16,
-                backgroundColor: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                color: "#ffffff",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <ShieldCheck size={20} style={{ flexShrink: 0, color: "#38bdf8" }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
-                  Switch to Admin Mode
-                </div>
-                <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)", marginTop: 2 }}>
-                  Manage slides, voice & TV settings
-                </div>
-              </div>
-              <ExternalLink size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
-            </button>
-
-            {/* Action 3: TV Devices Management */}
-            <a
-              href="/admin/signage/more/devices"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 14px",
-                borderRadius: 14,
-                backgroundColor: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.06)",
-                color: "#ffffff",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Tv size={18} style={{ flexShrink: 0, color: "#a78bfa" }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>Manage TV Devices</div>
-              </div>
-              <ExternalLink size={12} style={{ color: "rgba(255,255,255,0.3)" }} />
-            </a>
-
-            {/* Action 4: Toggle Fullscreen */}
-            <button
-              onClick={() => {
-                toggleFullScreen();
-                setShowQuickMenu(false);
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 14px",
-                borderRadius: 14,
-                backgroundColor: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.06)",
-                color: "#ffffff",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-              }}
-            >
-              <Maximize2 size={18} style={{ flexShrink: 0, color: "#facc15" }} />
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>Toggle Fullscreen</div>
-              </div>
-            </button>
-
-            {/* Action: Slide Transition Style (Cinematic Fade / Smooth Slide) */}
-            <div
-              style={{
-                padding: "10px 14px",
-                borderRadius: 14,
-                backgroundColor: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Sparkles size={16} style={{ color: "#facc15" }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
-                    Slide Transition
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: "3px 10px",
+                      borderRadius: 14,
+                      backgroundColor: "rgba(34, 197, 94, 0.2)",
+                      color: "#4ade80",
+                      fontWeight: 800,
+                      border: "1px solid rgba(34, 197, 94, 0.4)",
+                    }}
+                  >
+                    {token ? "PAIRED" : "LIVE"}
+                  </span>
+                  <button
+                    onClick={() => setShowQuickMenu(false)}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: "50%",
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      border: "none",
+                      color: "#fff",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 16,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* SLIDER 1: Voice & Music Volume Slider */}
+              <div
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: 18,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {isAudioMuted ? (
+                      <VolumeX size={18} style={{ color: "#f87171" }} />
+                    ) : (
+                      <Volume2 size={18} style={{ color: "#4ade80" }} />
+                    )}
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
+                      Volume Control
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => toggleTvAudio()}
+                    style={{
+                      padding: "4px 12px",
+                      borderRadius: 16,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      backgroundColor: !isAudioMuted ? "#22c55e" : "rgba(239, 68, 68, 0.3)",
+                      border: `1px solid ${!isAudioMuted ? "#22c55e" : "#ef4444"}`,
+                      color: !isAudioMuted ? "#022c22" : "#ffffff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {!isAudioMuted ? "MUTE" : "UNMUTE"}
+                  </button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    defaultValue="0.8"
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (audioRef.current) audioRef.current.volume = val;
+                      if (announcementAudioRef.current) announcementAudioRef.current.volume = val;
+                    }}
+                    style={{
+                      flex: 1,
+                      accentColor: "#22c55e",
+                      cursor: "pointer",
+                    }}
+                  />
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#4ade80", minWidth: 36 }}>
+                    Live
                   </span>
                 </div>
-                <span style={{ fontSize: 10, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>
-                  {transitionStyle === "cinematic" ? "Cinematic" : "Slide"}
-                </span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <button
-                  onClick={() => {
-                    setTransitionStyle("cinematic");
-                    localStorage.setItem("tv_transition_style", "cinematic");
-                    setSyncToast("Cinematic Fade Transition Applied ✨");
-                    setTimeout(() => setSyncToast(null), 2500);
-                  }}
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 10,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    backgroundColor: transitionStyle === "cinematic" ? "rgba(34, 197, 94, 0.25)" : "rgba(255, 255, 255, 0.05)",
-                    border: transitionStyle === "cinematic" ? "1px solid #22c55e" : "1px solid rgba(255, 255, 255, 0.1)",
-                    color: transitionStyle === "cinematic" ? "#86efac" : "#94a3b8",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  ✨ Smooth Fade
-                </button>
-                <button
-                  onClick={() => {
-                    setTransitionStyle("slide");
-                    localStorage.setItem("tv_transition_style", "slide");
-                    setSyncToast("Smooth Slide Transition Applied ➡️");
-                    setTimeout(() => setSyncToast(null), 2500);
-                  }}
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 10,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    backgroundColor: transitionStyle === "slide" ? "rgba(56, 189, 248, 0.25)" : "rgba(255, 255, 255, 0.05)",
-                    border: transitionStyle === "slide" ? "1px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.1)",
-                    color: transitionStyle === "slide" ? "#7dd3fc" : "#94a3b8",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  ➡️ Smooth Slide
-                </button>
-              </div>
-            </div>
-
-            {/* Action 5: Audio & Interval Timer Settings Card */}
-            <div
-              style={{
-                padding: "12px 14px",
-                borderRadius: 16,
-                backgroundColor: "rgba(255, 255, 255, 0.05)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {isAudioMuted ? (
-                    <VolumeX size={18} style={{ color: "#f87171" }} />
-                  ) : (
-                    <Volume2 size={18} style={{ color: "#4ade80" }} />
-                  )}
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
-                      Store Background Music
-                    </div>
-                    <div style={{ fontSize: 10, color: !isAudioMuted ? "#86efac" : "#fca5a5" }}>
-                      {!isAudioMuted
-                        ? isAudioPlaying
-                          ? "Playing Now 🔊"
-                          : audioIntervalCountdown !== null
-                          ? `Next Sound: in ${audioIntervalCountdown}s ⏱️`
-                          : "Active"
-                        : "Sound Muted 🔇"}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => toggleTvAudio()}
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: 20,
-                    backgroundColor: !isAudioMuted ? "#22c55e" : "rgba(239, 68, 68, 0.3)",
-                    border: `1px solid ${!isAudioMuted ? "#22c55e" : "#ef4444"}`,
-                    color: !isAudioMuted ? "#022c22" : "#ffffff",
-                    fontSize: 11,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  {!isAudioMuted ? "ON" : "OFF"}
-                </button>
               </div>
 
-              {/* Interval Timer Trigger Options */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>
-                  Trigger Interval (Kitne der baad baje):
+              {/* SLIDER 2: Sound Gap Trigger Duration */}
+              <div
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: 18,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
+                    ⏱️ Voice Gap (Timer Slider)
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#86efac" }}>
+                    {audioIntervalSec === 0
+                      ? "Continuous Loop"
+                      : audioIntervalSec >= 60
+                      ? `${audioIntervalSec / 60} min`
+                      : `${audioIntervalSec} sec`}
+                  </span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
                   {[
-                    { label: "Loop (Continuous)", sec: 0 },
-                    { label: "30 Sec", sec: 30 },
-                    { label: "1 Min", sec: 60 },
-                    { label: "2 Min", sec: 120 },
-                    { label: "3 Min", sec: 180 },
-                    { label: "5 Min", sec: 300 },
+                    { label: "Loop (0s)", sec: 0 },
+                    { label: "30s", sec: 30 },
+                    { label: "1 min", sec: 60 },
+                    { label: "2 min", sec: 120 },
+                    { label: "3 min", sec: 180 },
+                    { label: "5 min", sec: 300 },
                   ].map((item) => {
                     const isSelected = audioIntervalSec === item.sec;
                     return (
@@ -2729,13 +2620,13 @@ export default function TvPlayerPage() {
                         key={item.sec}
                         onClick={() => changeAudioInterval(item.sec)}
                         style={{
-                          padding: "6px 4px",
+                          padding: "7px 4px",
                           borderRadius: 10,
                           fontSize: 10,
-                          fontWeight: 700,
-                          backgroundColor: isSelected ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.04)",
+                          fontWeight: 800,
+                          backgroundColor: isSelected ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
                           border: `1px solid ${isSelected ? "#22c55e" : "rgba(255,255,255,0.1)"}`,
-                          color: isSelected ? "#4ade80" : "rgba(255,255,255,0.7)",
+                          color: isSelected ? "#4ade80" : "rgba(255,255,255,0.75)",
                           cursor: "pointer",
                           textAlign: "center",
                         }}
@@ -2764,74 +2655,259 @@ export default function TvPlayerPage() {
                       alignItems: "center",
                       justifyContent: "center",
                       gap: 6,
-                      marginTop: 4,
                     }}
                   >
                     <span>⏱️</span>
-                    <span>Set Custom Duration (Apni Marzi Ka Time)...</span>
+                    <span>Set Custom Seconds / Minutes...</span>
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* Action 6: Hard Reload TV App */}
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 14px",
-                borderRadius: 12,
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(255, 255, 255, 0.06)",
-                color: "rgba(255,255,255,0.7)",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              <RefreshCw size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
-              <span>Hard Reload TV App</span>
-            </button>
+              {/* SLIDER 3: TV Layout Profile Toggle (Standard vs Immersive) */}
+              <div
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: 18,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
+                    📺 TV Screen Layout Profile
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase" }}>
+                    {isImmersive ? "Immersive (16:9)" : "Standard Split"}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      const updated = {
+                        ...manifest,
+                        branding: {
+                          ...manifest.branding,
+                          layout_profile: "standard" as const,
+                        },
+                      };
+                      setManifest(updated);
+                      fetch("/api/signage/admin/branding", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ layout_profile: "standard" }),
+                      }).catch(() => {});
+                    }}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: !isImmersive ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: !isImmersive ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.1)",
+                      color: !isImmersive ? "#86efac" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    Standard (Split TV)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const updated = {
+                        ...manifest,
+                        branding: {
+                          ...manifest.branding,
+                          layout_profile: "immersive" as const,
+                        },
+                      };
+                      setManifest(updated);
+                      fetch("/api/signage/admin/branding", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ layout_profile: "immersive" }),
+                      }).catch(() => {});
+                    }}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: isImmersive ? "rgba(56, 189, 248, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: isImmersive ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                      color: isImmersive ? "#7dd3fc" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    Immersive (Full 16:9)
+                  </button>
+                </div>
+              </div>
 
-            {/* Action 7: Reset & Refresh Display */}
-            {token && (
+              {/* SLIDER 4: Slide Transition Effect */}
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: 18,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
+                    ✨ Slide Transition Animation
+                  </span>
+                  <span style={{ fontSize: 10, color: "#facc15", fontWeight: 800, textTransform: "uppercase" }}>
+                    {transitionStyle === "cinematic" ? "Cinematic Fade" : "Smooth Slide"}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <button
+                    onClick={() => {
+                      setTransitionStyle("cinematic");
+                      localStorage.setItem("tv_transition_style", "cinematic");
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: transitionStyle === "cinematic" ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: transitionStyle === "cinematic" ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.1)",
+                      color: transitionStyle === "cinematic" ? "#86efac" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✨ Smooth Fade
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTransitionStyle("slide");
+                      localStorage.setItem("tv_transition_style", "slide");
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: transitionStyle === "slide" ? "rgba(56, 189, 248, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: transitionStyle === "slide" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                      color: transitionStyle === "slide" ? "#7dd3fc" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ➡️ Glide Slide
+                  </button>
+                </div>
+              </div>
+
+              {/* Action: Open Admin Mode */}
               <button
                 onClick={() => {
-                  if (confirm("Reset TV Display cache?")) {
-                    localStorage.removeItem("signage_device_token");
-                    setToken(null);
-                    setShowQuickMenu(false);
-                    fetchManifest();
+                  setShowQuickMenu(false);
+                  if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+                    (window as any).AndroidSignage.switchMode("admin");
+                  } else {
+                    window.location.href = "/admin/signage";
                   }
                 }}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
-                  padding: "10px 14px",
-                  borderRadius: 14,
-                  backgroundColor: "rgba(239, 68, 68, 0.12)",
-                  border: "1px solid rgba(239, 68, 68, 0.25)",
-                  color: "#fca5a5",
+                  padding: "12px 16px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(34, 197, 94, 0.16)",
+                  border: "1px solid rgba(34, 197, 94, 0.4)",
+                  color: "#86efac",
                   cursor: "pointer",
                   textAlign: "left",
                   width: "100%",
-                  marginTop: 4,
                 }}
               >
-                <LogOut size={16} style={{ flexShrink: 0, color: "#ef4444" }} />
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>
-                    Reset Display Cache
+                <Smartphone size={20} style={{ flexShrink: 0, color: "#4ade80" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#ffffff" }}>
+                    Open Admin Mode (Upload Offers)
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
+                    Add new products & manage prices on mobile
                   </div>
                 </div>
               </button>
-            )}
-          </div>
+
+              {/* Action: Refresh & Sync */}
+              <button
+                disabled={isSyncing}
+                onClick={async () => {
+                  setIsSyncing(true);
+                  try {
+                    await fetchManifest();
+                    setSyncToast("TV Display Synced!");
+                    setTimeout(() => setSyncToast(null), 3000);
+                  } catch {
+                    window.location.reload();
+                  } finally {
+                    setIsSyncing(false);
+                    setShowQuickMenu(false);
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 16px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(56, 189, 248, 0.16)",
+                  border: "1px solid rgba(56, 189, 248, 0.4)",
+                  color: "#38bdf8",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <RefreshCw size={20} style={{ flexShrink: 0, color: "#38bdf8" }} className={isSyncing ? "animate-spin" : ""} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#ffffff" }}>
+                    {isSyncing ? "Syncing..." : "Refresh Products & Offers"}
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
+                    Fetch latest new items & prices
+                  </div>
+                </div>
+              </button>
+
+              {/* Action: Toggle Fullscreen */}
+              <button
+                onClick={() => {
+                  toggleFullScreen();
+                  setShowQuickMenu(false);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 16px",
+                  borderRadius: 14,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <Maximize2 size={18} style={{ flexShrink: 0, color: "#facc15" }} />
+                <div style={{ fontSize: 12, fontWeight: 700 }}>Toggle Fullscreen</div>
+              </button>
+            </div>
+          </>
         )}
       </div>
 

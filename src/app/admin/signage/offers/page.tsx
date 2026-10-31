@@ -39,6 +39,7 @@ export default function OffersManagePage() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Promotion | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Promotion | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Fetch promotions from API — always preserve local image and update localStorage with server truth
   const loadPromotions = async () => {
@@ -155,26 +156,34 @@ export default function OffersManagePage() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
+    const targetTitle = deleteTarget.title;
+
+    // 1. Instant optimistic UI removal (0ms latency!)
+    setPromotions((prev) => {
+      const next = prev.filter((p) => p.id !== targetId);
+      try {
+        localStorage.setItem("kathua_signage_promotions", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    setDeleteTarget(null);
+    setToastMessage(`✓ "${targetTitle}" deleted successfully`);
+    setTimeout(() => setToastMessage(null), 3000);
+
+    // 2. Real-time broadcast to TV
     try {
-      await fetch(`/api/signage/admin/promotions/${deleteTarget.id}`, {
+      const syncChannel = new BroadcastChannel("kathua_tv_sync");
+      syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+      syncChannel.close();
+      localStorage.setItem("signage_force_refresh", Date.now().toString());
+    } catch {}
+
+    // 3. Network delete in background
+    try {
+      await fetch(`/api/signage/admin/promotions/${targetId}`, {
         method: "DELETE",
       });
-      setPromotions((prev) => {
-        const next = prev.filter((p) => p.id !== deleteTarget.id);
-        try {
-          localStorage.setItem("kathua_signage_promotions", JSON.stringify(next));
-        } catch {}
-        return next;
-      });
-      setDeleteTarget(null);
-      try {
-        const syncChannel = new BroadcastChannel("kathua_tv_sync");
-        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
-        syncChannel.close();
-      } catch {}
-      try {
-        localStorage.setItem("signage_force_refresh", Date.now().toString());
-      } catch {}
     } catch {
       // ignore
     }
@@ -212,6 +221,13 @@ export default function OffersManagePage() {
           <span>New Offer</span>
         </button>
       </div>
+
+      {toastMessage && (
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-2 text-xs text-emerald-400 font-semibold animate-in fade-in shadow-lg">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* Filter Chips (PRD 9.3) */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
@@ -371,15 +387,16 @@ export default function OffersManagePage() {
             <div className="flex gap-2.5 pt-1">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 active:scale-95 transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold"
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-red-600/30 transition-all flex items-center justify-center gap-1.5"
               >
-                Yes, Remove
+                <Trash2 className="w-4 h-4" />
+                <span>Yes, Remove Now</span>
               </button>
             </div>
           </div>

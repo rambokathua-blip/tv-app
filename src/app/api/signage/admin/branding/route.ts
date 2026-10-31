@@ -6,7 +6,6 @@ import {
 } from "@/lib/signage/api-utils";
 import { devStore } from "@/lib/signage/dev-store";
 
-
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -40,10 +39,11 @@ export async function PATCH(request: Request) {
     return errorResponse("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
+  let updatedData = body;
   try {
     const admin = createAdminClient();
 
-    // Get the current branding row id
+    // Get current branding row id or insert if empty
     const { data: existing } = await admin
       .from("signage_branding")
       .select("id")
@@ -59,16 +59,41 @@ export async function PATCH(request: Request) {
         .single();
 
       if (!error && data) {
-        devStore.branding = {
-          ...devStore.branding,
-          ...data,
-        };
-        devStore.publish();
-        return successResponse(data);
+        updatedData = data;
       }
+    } else {
+      const { data } = await admin
+        .from("signage_branding")
+        .insert({ ...body, updated_at: new Date().toISOString() })
+        .select()
+        .single();
+      if (data) updatedData = data;
     }
-  } catch {
-    // fallback to devStore
+
+    // Auto update snapshot in latest signage_publish_versions so TV picks it up immediately
+    const { data: latestVer } = await admin
+      .from("signage_publish_versions")
+      .select("*")
+      .order("version_no", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latestVer) {
+      const currentSnap = latestVer.snapshot || {};
+      const newSnap = {
+        ...currentSnap,
+        branding: {
+          ...(currentSnap.branding || {}),
+          ...body,
+        },
+      };
+      await admin
+        .from("signage_publish_versions")
+        .update({ snapshot: newSnap })
+        .eq("id", latestVer.id);
+    }
+  } catch (err) {
+    console.warn("Supabase branding error:", err);
   }
 
   // DevStore fallback: update and publish immediately
@@ -79,6 +104,5 @@ export async function PATCH(request: Request) {
   };
   devStore.publish();
 
-  return successResponse(devStore.branding);
+  return successResponse(updatedData);
 }
-
