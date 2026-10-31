@@ -50,8 +50,16 @@ export default function SignageMoreMenuPage() {
         {
           title: "Live TV Fullscreen Preview",
           description: "View the exact 1920x1080 player layout in new tab",
-          href: "/tv?preview=true",
+          href: "/tv",
           icon: Eye,
+          external: true,
+        },
+        {
+          title: "Download Android TV App (APK)",
+          description: "Download the standalone APK installer for Xiaomi MiTV or Android devices",
+          href: "/KathuaFreshTV.apk",
+          icon: Tv,
+          badge: "APK v1.0.0",
           external: true,
         },
       ],

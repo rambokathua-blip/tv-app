@@ -14,6 +14,8 @@ jobs:
   build-apk:
     name: Compile Android TV APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -40,3 +42,11 @@ jobs:
         with:
           name: KathuaFreshTV-APK
           path: android-tv/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Update public/KathuaFreshTV.apk
+        run: |
+          cp android-tv/app/build/outputs/apk/debug/app-debug.apk public/KathuaFreshTV.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/KathuaFreshTV.apk
+          git diff --staged --quiet || (git commit -m "chore(apk): update public/KathuaFreshTV.apk [skip ci]" && git push origin HEAD:${{ github.ref }})

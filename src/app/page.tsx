@@ -118,6 +118,33 @@ export default function Home() {
           </Link>
         </div>
 
+        {/* Android TV APK Download Banner */}
+        <div className="mt-4 max-w-2xl mx-auto w-full">
+          <a
+            href="/KathuaFreshTV.apk"
+            download="KathuaFreshTV.apk"
+            className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/30 hover:border-emerald-400 flex items-center justify-between transition-all group shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+                APK
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                  Download Kathua Fresh TV APK
+                </div>
+                <div className="text-xs text-slate-400">
+                  Native Android TV player app (.apk) for Xiaomi MiTV & Android devices
+                </div>
+              </div>
+            </div>
+            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 shrink-0 bg-emerald-500/15 px-3 py-1.5 rounded-lg border border-emerald-500/30">
+              <span>Download</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </a>
+        </div>
+
         {/* Feature Checkpoints */}
         <div className="mt-12 max-w-2xl mx-auto w-full pt-8 border-t border-slate-900 flex flex-wrap items-center justify-around gap-4 text-xs text-slate-400">
           <div className="flex items-center gap-2">
