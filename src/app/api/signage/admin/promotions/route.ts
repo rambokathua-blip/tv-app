@@ -122,11 +122,22 @@ export async function POST(request: Request) {
       created_by: auth.claims.sub,
     };
 
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("signage_promotions")
       .insert(dbPayload)
       .select()
       .single();
+
+    if (error && error.message?.includes("mrp")) {
+      const { mrp, ...fallbackPayload } = dbPayload;
+      const retry = await admin
+        .from("signage_promotions")
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (!error && data) {
       await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
@@ -178,6 +189,7 @@ export async function POST(request: Request) {
             promotion_id: p.id,
             title: p.title || "Offer",
             price_text: p.price_text,
+            mrp: p.mrp || null,
             duration_sec: p.duration_sec || 8,
             image_url: img,
           };

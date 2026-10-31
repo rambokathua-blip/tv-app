@@ -1052,57 +1052,136 @@ export default function TvPlayerPage() {
           </div>
         )}
 
-        {/* Irresistible Animated Floating Price Badge */}
-        {slide.price_text && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 44,
-              left: 44,
-              zIndex: 15,
-              background: "linear-gradient(135deg, rgba(15, 23, 42, 0.94) 0%, rgba(6, 40, 30, 0.94) 100%)",
-              backdropFilter: "blur(16px)",
-              padding: "18px 40px",
-              borderRadius: 24,
-              border: "2.5px solid #facc15",
-              boxShadow: "0 20px 50px rgba(0,0,0,0.85), 0 0 35px rgba(250, 204, 21, 0.45)",
-              animation: "priceBadgeFloat 3.5s ease-in-out infinite, priceBadgeGlow 3s ease-in-out infinite",
-            }}
-          >
+        {/* Irresistible Animated Floating Price & MRP Badge */}
+        {(() => {
+          let displayMrp = slide.mrp || null;
+          let displayPrice = slide.price_text || "";
+
+          // Smart fallback: if slide.mrp is not set directly, but price_text contains "MRP: 30 TODAY price: 25 rs" or similar
+          if (!displayMrp && displayPrice) {
+            const mrpMatch = displayPrice.match(/mrp[:\s]*([0-9₹]+)/i);
+            if (mrpMatch) {
+              displayMrp = mrpMatch[1].startsWith("₹") ? mrpMatch[1] : `₹${mrpMatch[1]}`;
+              const dealMatch = displayPrice.match(/(?:today price|deal|offer price|price|@)[:\s]*([0-9₹\s\w/]+)/i);
+              if (dealMatch) {
+                displayPrice = dealMatch[1].trim();
+              }
+            }
+          }
+
+          // Calculate discount badge
+          let discountText: string | null = null;
+          if (displayMrp && displayPrice) {
+            const numMrp = parseFloat(displayMrp.replace(/[^0-9.]/g, ""));
+            const numPrice = parseFloat(displayPrice.replace(/[^0-9.]/g, ""));
+            if (numMrp > 0 && numPrice > 0 && numMrp > numPrice) {
+              const saving = Math.round(numMrp - numPrice);
+              const pct = Math.round(((numMrp - numPrice) / numMrp) * 100);
+              discountText = `${pct}% OFF • SAVE ₹${saving}`;
+            }
+          }
+
+          if (!displayPrice && !displayMrp) return null;
+
+          return (
             <div
               style={{
-                fontSize: 26,
-                color: "#86efac",
-                fontWeight: 800,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
+                position: "absolute",
+                bottom: 44,
+                left: 44,
+                zIndex: 15,
+                background: "linear-gradient(135deg, rgba(15, 23, 42, 0.94) 0%, rgba(6, 40, 30, 0.94) 100%)",
+                backdropFilter: "blur(16px)",
+                padding: "18px 40px",
+                borderRadius: 24,
+                border: "2.5px solid #facc15",
+                boxShadow: "0 20px 50px rgba(0,0,0,0.85), 0 0 35px rgba(250, 204, 21, 0.45)",
+                animation: "priceBadgeFloat 3.5s ease-in-out infinite, priceBadgeGlow 3s ease-in-out infinite",
               }}
             >
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "#4ade80", boxShadow: "0 0 10px #4ade80" }} />
-              <span>{slide.title}</span>
+              {/* Offer Title */}
+              <div
+                style={{
+                  fontSize: 26,
+                  color: "#86efac",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "#4ade80", boxShadow: "0 0 10px #4ade80" }} />
+                <span>{slide.title}</span>
+              </div>
+
+              {/* Crossed-out MRP & Discount Badge */}
+              {displayMrp && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginTop: 6,
+                    marginBottom: 2,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 28,
+                      fontWeight: 700,
+                      color: "rgba(255, 255, 255, 0.55)",
+                      textDecoration: "line-through",
+                      textDecorationColor: "#ef4444",
+                      textDecorationThickness: 3,
+                    }}
+                  >
+                    MRP {displayMrp.startsWith("₹") ? displayMrp : `₹${displayMrp}`}
+                  </span>
+                  {discountText && (
+                    <span
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 900,
+                        padding: "3px 12px",
+                        borderRadius: 10,
+                        background: "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)",
+                        color: "#ffffff",
+                        boxShadow: "0 4px 14px rgba(239, 68, 68, 0.5)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {discountText}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Big Glowing Deal Price */}
+              {displayPrice && (
+                <div
+                  style={{
+                    fontSize: displayMrp ? 64 : 72,
+                    fontWeight: 900,
+                    letterSpacing: "-0.02em",
+                    lineHeight: 1.1,
+                    marginTop: 2,
+                    background: "linear-gradient(90deg, #fef08a 0%, #facc15 35%, #ffffff 50%, #facc15 65%, #f59e0b 100%)",
+                    backgroundSize: "200% auto",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    animation: "shimmerSweep 4s linear infinite",
+                    textShadow: "0 4px 20px rgba(250, 204, 21, 0.4)",
+                  }}
+                >
+                  {displayPrice}
+                </div>
+              )}
             </div>
-            <div
-              style={{
-                fontSize: 72,
-                fontWeight: 900,
-                letterSpacing: "-0.02em",
-                lineHeight: 1.1,
-                marginTop: 2,
-                background: "linear-gradient(90deg, #fef08a 0%, #facc15 35%, #ffffff 50%, #facc15 65%, #f59e0b 100%)",
-                backgroundSize: "200% auto",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                animation: "shimmerSweep 4s linear infinite",
-                textShadow: "0 4px 20px rgba(250, 204, 21, 0.4)",
-              }}
-            >
-              {slide.price_text}
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     );
   };

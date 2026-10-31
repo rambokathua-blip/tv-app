@@ -23,6 +23,7 @@ export interface Promotion {
   id: string;
   title: string;
   price_text?: string | null;
+  mrp?: string | null;
   media_id?: string | null;
   media?: MediaItem | null;
   duration_sec: number;
@@ -125,6 +126,7 @@ export interface ManifestSlide {
   promotion_id: string;
   title: string;
   price_text?: string | null;
+  mrp?: string | null;
   duration_sec: number;
   image_url: string;
   image_sha256?: string;

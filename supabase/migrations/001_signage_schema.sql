@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS signage_promotions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   price_text TEXT,
+  mrp TEXT,
   media_id UUID REFERENCES signage_media(id),
   duration_sec INTEGER NOT NULL DEFAULT 10
     CHECK (duration_sec >= 3 AND duration_sec <= 60),

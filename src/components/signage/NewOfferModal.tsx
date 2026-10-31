@@ -128,6 +128,7 @@ export default function NewOfferModal({
 
   // Form details
   const [title, setTitle] = useState("");
+  const [mrp, setMrp] = useState("");
   const [priceText, setPriceText] = useState("");
   const [durationSec, setDurationSec] = useState(10);
   const [startsAt, setStartsAt] = useState("");
@@ -214,6 +215,7 @@ export default function NewOfferModal({
       id: tempId,
       title: title.trim(),
       price_text: priceText.trim() || null,
+      mrp: mrp.trim() ? (mrp.startsWith("₹") ? mrp.trim() : `₹${mrp.trim()}`) : null,
       duration_sec: durationSec || 8,
       status: publishImmediately ? "live" : "draft",
       enabled: true,
@@ -285,6 +287,7 @@ export default function NewOfferModal({
         body: JSON.stringify({
           title: title.trim(),
           price_text: priceText.trim() || null,
+          mrp: mrp.trim() ? (mrp.startsWith("₹") ? mrp.trim() : `₹${mrp.trim()}`) : null,
           media_id: finalMediaId || "/kathua-fresh-logo.jpg",
           duration_sec: durationSec,
           starts_at: startsAt ? new Date(startsAt).toISOString() : null,
@@ -671,18 +674,64 @@ export default function NewOfferModal({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Price Overlay (e.g. Buy 3 @ 50 rs, ₹38 / kg)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Buy 3 @ 50 rs"
-                  value={priceText}
-                  onChange={(e) => setPriceText(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-300 font-black placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>Original MRP (Optional)</span>
+                    <span className="text-[10px] text-red-400 font-bold">कटेगा (Strikethrough)</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">₹</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. 30"
+                      value={mrp}
+                      onChange={(e) => setMrp(e.target.value.replace(/[^0-9.]/g, ""))}
+                      className="w-full pl-7 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-300 line-through font-bold placeholder-slate-600 text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-500 mt-1 block">TV par crossed-out dikhega</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>Offer / Deal Price *</span>
+                    <span className="text-[10px] text-emerald-400 font-bold">Big & Glowing</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 25 rs or ₹25"
+                    value={priceText}
+                    onChange={(e) => setPriceText(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-300 font-black placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-amber-400/80 mt-1 block">Customer deal price</span>
+                </div>
               </div>
+
+              {/* Discount Calculator Live Preview */}
+              {mrp && priceText && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <span className="line-through text-slate-400 font-bold">MRP ₹{mrp}</span>
+                    <span className="text-emerald-400 font-extrabold">➜ Deal: {priceText}</span>
+                  </div>
+                  {(() => {
+                    const numMrp = parseFloat(mrp);
+                    const numPrice = parseFloat(priceText.replace(/[^0-9.]/g, ""));
+                    if (numMrp > 0 && numPrice > 0 && numMrp > numPrice) {
+                      const saving = Math.round(numMrp - numPrice);
+                      const pct = Math.round(((numMrp - numPrice) / numMrp) * 100);
+                      return (
+                        <span className="px-2 py-0.5 rounded-lg bg-red-500 text-white font-black text-[10px] uppercase tracking-wider shadow-sm">
+                          {pct}% OFF • SAVE ₹{saving}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -753,12 +802,19 @@ export default function NewOfferModal({
 
                 {/* Simulated Price Tag */}
                 {priceText && (
-                  <div className="absolute bottom-6 left-3 bg-slate-950/90 backdrop-blur-md border border-amber-400/80 px-3 py-1.5 rounded-xl shadow-lg animate-pulse">
+                  <div className="absolute bottom-6 left-3 bg-slate-950/90 backdrop-blur-md border border-amber-400/80 px-3 py-1.5 rounded-xl shadow-lg">
                     <div className="text-[9px] text-emerald-400 font-bold uppercase leading-none">
                       {title}
                     </div>
-                    <div className="text-sm font-black text-amber-300 leading-tight">
-                      {priceText}
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      {mrp && (
+                        <span className="text-[10px] line-through text-red-400 font-bold">
+                          MRP ₹{mrp}
+                        </span>
+                      )}
+                      <span className="text-sm font-black text-amber-300 leading-tight">
+                        {priceText}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -780,9 +836,15 @@ export default function NewOfferModal({
                   <span className="text-slate-400">Offer Title:</span>
                   <span className="font-bold text-white">{title}</span>
                 </div>
+                {mrp && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Original MRP:</span>
+                    <span className="font-bold text-slate-400 line-through">₹{mrp}</span>
+                  </div>
+                )}
                 {priceText && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Price Display:</span>
+                    <span className="text-slate-400">Deal Price:</span>
                     <span className="font-black text-amber-300">{priceText}</span>
                   </div>
                 )}

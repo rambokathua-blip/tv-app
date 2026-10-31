@@ -115,12 +115,24 @@ export async function PATCH(
       updatePayload.notes = `IMG:${customImg}`;
     }
 
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("signage_promotions")
       .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
+
+    if (error && error.message?.includes("mrp")) {
+      delete updatePayload.mrp;
+      const retry = await admin
+        .from("signage_promotions")
+        .update(updatePayload)
+        .eq("id", id)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (!error && data) {
       await auditLog(auth.claims.sub, "promotion.update", "promotion", id);

@@ -63,6 +63,7 @@ export async function GET(request: Request) {
         promotion_id: p.id,
         title: p.title || "Offer",
         price_text: p.price_text,
+        mrp: p.mrp || null,
         duration_sec: p.duration_sec || 8,
         image_url:
           p.media?.storage_path ||

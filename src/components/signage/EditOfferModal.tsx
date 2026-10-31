@@ -156,6 +156,7 @@ export default function EditOfferModal({
     "/kathua-fresh-logo.jpg";
 
   const [title, setTitle] = useState(promo.title);
+  const [mrp, setMrp] = useState(promo.mrp || "");
   const [priceText, setPriceText] = useState(promo.price_text || "");
   const [durationSec, setDurationSec] = useState(promo.duration_sec || 10);
   const [status, setStatus] = useState(promo.status);
@@ -174,6 +175,7 @@ export default function EditOfferModal({
   useEffect(() => {
     if (isOpen) {
       setTitle(promo.title);
+      setMrp(promo.mrp || "");
       setPriceText(promo.price_text || "");
       setDurationSec(promo.duration_sec || 10);
       setStatus(promo.status);
@@ -291,6 +293,7 @@ export default function EditOfferModal({
         body: JSON.stringify({
           title: title.trim(),
           price_text: priceText.trim() || null,
+          mrp: mrp.trim() ? (mrp.startsWith("₹") ? mrp.trim() : `₹${mrp.trim()}`) : null,
           duration_sec: durationSec,
           status,
           enabled: status === "live",
@@ -316,6 +319,7 @@ export default function EditOfferModal({
                   ...(updatedPromoData?.promotion || updatedPromoData || {}),
                   title: title.trim(),
                   price_text: priceText.trim() || null,
+                  mrp: mrp.trim() ? (mrp.startsWith("₹") ? mrp.trim() : `₹${mrp.trim()}`) : null,
                   duration_sec: durationSec,
                   status,
                   enabled: status === "live",
@@ -448,12 +452,19 @@ export default function EditOfferModal({
 
               {/* Price badge mockup */}
               {priceText && (
-                <div className="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur-sm border border-emerald-500 px-3 py-1 rounded-xl">
+                <div className="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur-sm border border-emerald-500 px-3 py-1.5 rounded-xl shadow-lg">
                   <div className="text-[10px] text-emerald-400 font-bold uppercase leading-none">
                     {title}
                   </div>
-                  <div className="text-sm font-black text-amber-300">
-                    {priceText}
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    {mrp && (
+                      <span className="text-[10px] line-through text-red-400 font-bold">
+                        MRP {mrp.startsWith("₹") ? mrp : `₹${mrp}`}
+                      </span>
+                    )}
+                    <span className="text-sm font-black text-amber-300">
+                      {priceText}
+                    </span>
                   </div>
                 </div>
               )}
@@ -616,18 +627,40 @@ export default function EditOfferModal({
             />
           </div>
 
-          {/* Price */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Price Text (Large on TV screen)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. ₹95 / kg"
-              value={priceText}
-              onChange={(e) => setPriceText(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-emerald-400 font-bold text-sm focus:outline-none focus:border-emerald-500"
-            />
+          {/* Price & Optional MRP */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                <span>Original MRP (Optional)</span>
+                <span className="text-[10px] text-red-400 font-bold">कटेगा</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="text"
+                  placeholder="e.g. 30"
+                  value={mrp}
+                  onChange={(e) => setMrp(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className="w-full pl-7 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-300 line-through font-bold placeholder-slate-600 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1 block">Crossed-out on TV</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                <span>Offer / Deal Price *</span>
+                <span className="text-[10px] text-emerald-400 font-bold">Big on TV</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. ₹95 / kg or 25 rs"
+                value={priceText}
+                onChange={(e) => setPriceText(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-300 font-bold text-sm focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-[10px] text-amber-400/80 mt-1 block">Customer deal price</span>
+            </div>
           </div>
 
           {/* Duration Chips */}

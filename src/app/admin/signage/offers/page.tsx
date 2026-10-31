@@ -310,6 +310,11 @@ export default function OffersManagePage() {
                 </div>
 
                 <div className="flex items-center gap-2 mt-1">
+                  {promo.mrp && (
+                    <span className="text-[11px] font-semibold text-slate-400 line-through">
+                      MRP {promo.mrp.startsWith("₹") ? promo.mrp : `₹${promo.mrp}`}
+                    </span>
+                  )}
                   {promo.price_text && (
                     <span className="text-xs font-extrabold text-amber-400">
                       {promo.price_text}
