@@ -13,12 +13,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var cameraPhotoUri: Uri? = null
     private var cameraPhotoFile: File? = null
+    private var pendingActionIsCapture: Boolean? = null
     private val FILE_CHOOSER_REQUEST_CODE = 2001
     private val PERMISSION_REQUEST_CODE = 3001
 
@@ -94,22 +97,106 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         webView.loadUrl(getTargetUrlForMode(mode))
     }
 
-    private fun checkAppPermissions() {
-        val permissionsToRequest = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(android.Manifest.permission.CAMERA)
+    private fun getRequiredPermissions(isCamera: Boolean): Array<String> {
+        val permissions = mutableListOf<String>()
+        if (isCamera) {
+            permissions.add(android.Manifest.permission.CAMERA)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+
+            permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            permissions.add(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13
+            permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            // Android 12 and below
+            permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+        return permissions.distinct().toTypedArray()
+    }
+
+    private fun hasRequiredPermissions(isCamera: Boolean): Boolean {
+        if (isCamera) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                return false
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+: Full access or partial user-selected photo access
+            val hasImages = ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            val hasVisual = ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+            if (!hasImages && !hasVisual) return false
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+                return false
             }
         } else {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                return false
+            }
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    return false
+                }
             }
         }
-        if (permissionsToRequest.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+        return true
+    }
+
+    private fun requestPermissionsForAction(isCamera: Boolean) {
+        val required = getRequiredPermissions(isCamera)
+        val missing = required.filter { perm ->
+            ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isEmpty()) {
+            launchChooser(isCamera)
+            return
+        }
+
+        pendingActionIsCapture = isCamera
+        ActivityCompat.requestPermissions(this, missing.toTypedArray(), PERMISSION_REQUEST_CODE)
+    }
+
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            Toast.makeText(this, "Please enable Camera and Photos permissions here", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Unable to open application settings", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showPermissionDeniedDialog(isCamera: Boolean) {
+        val feature = if (isCamera) "Camera & Photos" else "Photos & Gallery"
+        AlertDialog.Builder(this)
+            .setTitle("Permission Required")
+            .setMessage("Kathua Fresh needs $feature permission to upload offer photos to TV screens.\n\nPlease enable permissions in App Settings.")
+            .setPositiveButton("Open Settings") { _, _ ->
+                openAppSettings()
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun checkAppPermissions() {
+        val required = getRequiredPermissions(true)
+        val missing = required.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), PERMISSION_REQUEST_CODE)
         }
     }
 
@@ -182,6 +269,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
 
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                runOnUiThread {
+                    try {
+                        request?.grant(request.resources)
+                    } catch (e: Exception) {
+                        request?.deny()
+                    }
+                }
+            }
+
             override fun onShowFileChooser(
                 view: WebView?,
                 filePathCallback: ValueCallback<Array<Uri>>?,
@@ -190,28 +287,35 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 fileUploadCallback?.onReceiveValue(null)
                 fileUploadCallback = filePathCallback
 
-                // Ensure camera & storage permissions are checked
-                checkAppPermissions()
+                val isCapture = fileChooserParams?.isCaptureEnabled == true ||
+                    (fileChooserParams?.acceptTypes?.any { it.contains("camera", ignoreCase = true) } == true)
 
-                try {
-                    val isCapture = fileChooserParams?.isCaptureEnabled == true
-                    val chooserIntent = buildChooserIntent(isCapture)
-                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
-                    return true
-                } catch (e: Exception) {
-                    try {
-                        val simplePicker = Intent(Intent.ACTION_GET_CONTENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "image/*"
-                        }
-                        startActivityForResult(simplePicker, FILE_CHOOSER_REQUEST_CODE)
-                        return true
-                    } catch (e2: Exception) {
-                        fileUploadCallback?.onReceiveValue(null)
-                        fileUploadCallback = null
-                        return false
-                    }
+                if (hasRequiredPermissions(isCapture)) {
+                    launchChooser(isCapture)
+                } else {
+                    requestPermissionsForAction(isCapture)
                 }
+                return true
+            }
+        }
+    }
+
+    private fun launchChooser(isCameraOnly: Boolean) {
+        try {
+            val chooserIntent = buildChooserIntent(isCameraOnly)
+            startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+        } catch (e: Exception) {
+            try {
+                val simplePicker = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                }
+                startActivityForResult(simplePicker, FILE_CHOOSER_REQUEST_CODE)
+            } catch (e2: Exception) {
+                fileUploadCallback?.onReceiveValue(null)
+                fileUploadCallback = null
+                pendingActionIsCapture = null
+                Toast.makeText(this, "No image picker application found", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -229,9 +333,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             type = "image/*"
         }
         val extraIntents = mutableListOf<Intent>()
-        if (cameraIntent.resolveActivity(packageManager) != null) {
-            extraIntents.add(cameraIntent)
-        }
+        extraIntents.add(cameraIntent)
         extraIntents.add(pickIntent)
 
         val chooser = Intent(Intent.ACTION_CHOOSER).apply {
@@ -274,13 +376,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            val isCamera = pendingActionIsCapture ?: false
+            val granted = hasRequiredPermissions(isCamera)
+
+            if (granted) {
+                Toast.makeText(this, "Permission granted! Opening...", Toast.LENGTH_SHORT).show()
+                if (fileUploadCallback != null) {
+                    launchChooser(isCamera)
+                }
+            } else {
+                Toast.makeText(this, "Permission denied for photo access", Toast.LENGTH_SHORT).show()
+                fileUploadCallback?.onReceiveValue(null)
+                fileUploadCallback = null
+                pendingActionIsCapture = null
+                showPermissionDeniedDialog(isCamera)
+            }
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
-            if (fileUploadCallback == null) return
-
             var results: Array<Uri>? = null
             if (resultCode == RESULT_OK) {
                 // 1. Check if camera captured high-res photo to file
@@ -313,6 +430,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             fileUploadCallback = null
             cameraPhotoUri = null
             cameraPhotoFile = null
+            pendingActionIsCapture = null
         }
     }
 
@@ -406,13 +524,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         @JavascriptInterface
+        fun checkPermissions(): Boolean {
+            return hasRequiredPermissions(true)
+        }
+
+        @JavascriptInterface
+        fun requestPermissions() {
+            runOnUiThread {
+                requestPermissionsForAction(true)
+            }
+        }
+
+        @JavascriptInterface
+        fun openAppSettings() {
+            runOnUiThread {
+                this@MainActivity.openAppSettings()
+            }
+        }
+
+        @JavascriptInterface
         fun openImagePicker() {
             runOnUiThread {
-                try {
-                    val chooser = buildChooserIntent(false)
-                    startActivityForResult(chooser, FILE_CHOOSER_REQUEST_CODE)
-                } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "Opening Gallery...", Toast.LENGTH_SHORT).show()
+                if (!hasRequiredPermissions(false)) {
+                    requestPermissionsForAction(false)
+                } else {
+                    webView.evaluateJavascript(
+                        "(function() { var el = document.getElementById('new-offer-gallery-input') || document.getElementById('edit-offer-file-input') || document.querySelector('input[type=file]:not([capture])'); if(el) el.click(); })();",
+                        null
+                    )
                 }
             }
         }
@@ -420,11 +559,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         @JavascriptInterface
         fun openCamera() {
             runOnUiThread {
-                try {
-                    val cameraIntent = buildChooserIntent(true)
-                    startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST_CODE)
-                } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "Opening Camera...", Toast.LENGTH_SHORT).show()
+                if (!hasRequiredPermissions(true)) {
+                    requestPermissionsForAction(true)
+                } else {
+                    webView.evaluateJavascript(
+                        "(function() { var el = document.getElementById('new-offer-camera-input') || document.getElementById('edit-offer-camera-input') || document.querySelector('input[capture]'); if(el) el.click(); })();",
+                        null
+                    )
                 }
             }
         }
