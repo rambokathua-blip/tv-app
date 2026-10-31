@@ -60,41 +60,36 @@ export async function POST(request: Request) {
   const width: number | null = null;
   const height: number | null = null;
 
-  const hasRealSupabaseKey =
-    Boolean(process.env.SUPABASE_SECRET_KEY) &&
-    !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
-
-  // Generate self-contained Base64 data URI (100% resilient across Vercel serverless, APK, offline TV)
+  // Generate self-contained Base64 data URI (100% resilient across devices, APK, offline TV)
   const base64 = Buffer.from(arrayBuffer).toString("base64");
   const dataUri = `data:${mime};base64,${base64}`;
   let mediaId = "media-" + crypto.randomUUID();
 
-  if (hasRealSupabaseKey) {
-    try {
-      const admin = createAdminClient();
-      const { data: media, error: dbError } = await admin
-        .from("signage_media")
-        .insert({
-          kind,
-          storage_path: dataUri,
-          mime,
-          bytes: file.size,
-          width,
-          height,
-          sha256,
-          thumb_path: dataUri,
-          created_by: auth.claims.sub,
-        })
-        .select()
-        .single();
+  // Always persist image to Supabase cloud storage / media table for cross-device synchronization
+  try {
+    const admin = createAdminClient();
+    const { data: media, error: dbError } = await admin
+      .from("signage_media")
+      .insert({
+        kind,
+        storage_path: dataUri,
+        mime,
+        bytes: file.size,
+        width,
+        height,
+        sha256,
+        thumb_path: dataUri,
+        created_by: auth.claims.sub,
+      })
+      .select()
+      .single();
 
-      if (!dbError && media) {
-        finalMedia = media;
-        mediaId = media.id;
-      }
-    } catch {
-      // Supabase unmigrated or down
+    if (!dbError && media) {
+      finalMedia = media;
+      mediaId = media.id;
     }
+  } catch (err) {
+    console.warn("Supabase signage_media upload fallback:", err);
   }
 
   if (!finalMedia) {

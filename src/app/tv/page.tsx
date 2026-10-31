@@ -456,8 +456,43 @@ export default function TvPlayerPage() {
     setManifest(baseManifest);
   }, []);
 
-  // Helper to enrich manifest with custom uploaded offers from local storage
+  const manifestVersionRef = useRef(manifest.version);
+  useEffect(() => {
+    manifestVersionRef.current = manifest.version;
+  }, [manifest.version]);
+
+  // Helper to enrich manifest with custom uploaded offers from local storage (offline fallback only)
   const enrichWithLocalPromotions = useCallback((manifestData: SignageManifest): SignageManifest => {
+    // If server manifest already has slides from the cloud database, use them directly (cloud is source of truth)
+    if (manifestData.slides && manifestData.slides.length > 0) {
+      const validSlides = manifestData.slides.filter(
+        (s) => s.id !== "demo-onion" && s.id !== "demo-apple"
+      );
+      if (validSlides.length === 1) {
+        return {
+          ...manifestData,
+          slides: [
+            validSlides[0],
+            {
+              id: "welcome-slide-brand",
+              promotion_id: "promo-welcome-brand",
+              title: "Kathua Fresh Store",
+              price_text: "Quality Assured | Always Fresh",
+              duration_sec: 8,
+              image_url: "/kathua-fresh-logo.jpg",
+            },
+          ],
+        };
+      }
+      if (validSlides.length > 1) {
+        return {
+          ...manifestData,
+          slides: validSlides,
+        };
+      }
+    }
+
+    // Only if server has 0 slides, check offline local storage fallback
     try {
       if (typeof window === "undefined") return manifestData;
       const raw = localStorage.getItem("kathua_signage_promotions");
@@ -471,7 +506,7 @@ export default function TvPlayerPage() {
               promotion_id: p.id,
               title: p.title || "Offer",
               price_text: p.price_text,
-              duration_sec: p.duration_sec || 10,
+              duration_sec: p.duration_sec || 8,
               image_url:
                 (p.media_id && (p.media_id.startsWith("/") || p.media_id.startsWith("http") || p.media_id.startsWith("data:"))
                   ? p.media_id
@@ -481,16 +516,10 @@ export default function TvPlayerPage() {
                 "/kathua-fresh-logo.jpg",
             }));
 
-            // Merge local custom slides with server slides (local custom takes top priority)
-            const localIds = new Set(localSlides.map((s) => s.id));
-            const otherSlides = (manifestData.slides || []).filter(
-              (s) => !localIds.has(s.id) && s.id !== "demo-onion" && s.id !== "demo-apple"
-            );
-            const combined = [...localSlides, ...otherSlides];
             const finalSlides =
-              combined.length === 1
+              localSlides.length === 1
                 ? [
-                    combined[0],
+                    localSlides[0],
                     {
                       id: "welcome-slide-brand",
                       promotion_id: "promo-welcome-brand",
@@ -500,7 +529,7 @@ export default function TvPlayerPage() {
                       image_url: "/kathua-fresh-logo.jpg",
                     },
                   ]
-                : combined;
+                : localSlides;
 
             return {
               ...manifestData,
@@ -519,7 +548,10 @@ export default function TvPlayerPage() {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch("/api/signage/device/manifest", { headers });
+      const res = await fetch(`/api/signage/device/manifest?_t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
       if (res.ok) {
         const rawData = await res.json();
         const data = enrichWithLocalPromotions(rawData);
@@ -555,10 +587,14 @@ export default function TvPlayerPage() {
       try {
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch("/api/signage/device/version", { headers });
+        const res = await fetch(`/api/signage/device/version?_t=${Date.now()}`, {
+          headers,
+          cache: "no-store",
+        });
         if (res.ok) {
           const data = await res.json();
-          if (data.version && data.version !== manifest.version) {
+          if (data.version && data.version !== manifestVersionRef.current) {
+            manifestVersionRef.current = data.version;
             fetchManifest();
           }
           setIsOffline(false);
@@ -621,7 +657,7 @@ export default function TvPlayerPage() {
       if (syncChannel) syncChannel.close();
       window.removeEventListener("storage", handleStorage);
     };
-  }, [token, manifest.version, manifest.slides, currentIndex, fetchManifest]);
+  }, [token, fetchManifest]);
 
   // Listen for Live Broadcast Announcements
   useEffect(() => {

@@ -8,6 +8,8 @@ import {
 import { devStore } from "@/lib/signage/dev-store";
 
 
+import { NextResponse } from "next/server";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -26,18 +28,38 @@ export async function GET(request: Request) {
       .single();
 
     if (!error && data) {
-      return successResponse({
-        version: data.version_no,
-        published_at: data.published_at,
-      });
+      return NextResponse.json(
+        {
+          version: data.version_no,
+          published_at: data.published_at,
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        }
+      );
     }
   } catch {
     // fallback to devStore
   }
 
   devStore.load();
-  return successResponse({
-    version: devStore.version,
-    published_at: new Date().toISOString(),
-  });
+  return NextResponse.json(
+    {
+      version: devStore.version,
+      published_at: new Date().toISOString(),
+    },
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    }
+  );
 }

@@ -22,18 +22,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
-  const hasRealSupabaseKey =
-    Boolean(process.env.SUPABASE_SECRET_KEY) &&
-    !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
-
-  if (hasRealSupabaseKey) {
-    try {
-      const admin = createAdminClient();
-      let query = admin
-        .from("signage_promotions")
-        .select("*, media:signage_media(*)")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+  // Always query Supabase cloud database first for cross-device synchronization
+  try {
+    const admin = createAdminClient();
+    let query = admin
+      .from("signage_promotions")
+      .select("*, media:signage_media(*)")
+      .neq("status", "archived")
+      .order("created_at", { ascending: false });
 
       if (status) {
         query = query.eq("status", status);
@@ -69,7 +65,6 @@ export async function GET(request: Request) {
     } catch {
       // fallback
     }
-  }
 
   // DevStore fallback: load fresh persistent disk state
   devStore.load();
@@ -86,102 +81,190 @@ export async function POST(request: Request) {
   const parsed = await parseBody(request, createPromotionSchema);
   if (parsed.error) return parsed.error;
 
-  const hasRealSupabaseKey =
-    Boolean(process.env.SUPABASE_SECRET_KEY) &&
-    !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
+  // Always persist promotion to Supabase cloud database for instant cross-device synchronization
+  try {
+    const admin = createAdminClient();
+    let mediaUuid: string | null = null;
+    const customImg = parsed.data.media_id;
 
-  if (hasRealSupabaseKey) {
-    try {
-      const admin = createAdminClient();
-      let mediaUuid: string | null = null;
-      const customImg = parsed.data.media_id;
-
-      if (customImg) {
-        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customImg)) {
-          mediaUuid = customImg;
-        } else {
-          // Store custom data URI / URL in signage_media to get a valid foreign key UUID
-          try {
-            const { data: mediaRec } = await admin
-              .from("signage_media")
-              .insert({
-                kind: "image",
-                storage_path: customImg,
-                mime: customImg.startsWith("data:image/png") ? "image/png" : "image/jpeg",
-                bytes: customImg.length,
-                sha256: "custom-" + Date.now(),
-                created_by: auth.claims.sub,
-                thumb_path: customImg,
-              })
-              .select("id")
-              .single();
-            if (mediaRec?.id) {
-              mediaUuid = mediaRec.id;
-            }
-          } catch (mediaErr) {
-            console.warn("Signage media creation fallback:", mediaErr);
+    if (customImg) {
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customImg)) {
+        mediaUuid = customImg;
+      } else {
+        // Store custom data URI / URL in signage_media to get a valid foreign key UUID
+        try {
+          const { data: mediaRec } = await admin
+            .from("signage_media")
+            .insert({
+              kind: "image",
+              storage_path: customImg,
+              mime: customImg.startsWith("data:image/png") ? "image/png" : "image/jpeg",
+              bytes: customImg.length,
+              sha256: "custom-" + Date.now(),
+              created_by: auth.claims.sub,
+              thumb_path: customImg,
+            })
+            .select("id")
+            .single();
+          if (mediaRec?.id) {
+            mediaUuid = mediaRec.id;
           }
+        } catch (mediaErr) {
+          console.warn("Signage media creation fallback:", mediaErr);
         }
       }
+    }
 
-      const dbPayload = {
-        ...parsed.data,
-        media_id: mediaUuid,
-        notes: customImg ? `IMG:${customImg}` : parsed.data.notes,
-        created_by: auth.claims.sub,
-      };
+    const dbPayload = {
+      ...parsed.data,
+      media_id: mediaUuid,
+      notes: customImg ? `IMG:${customImg}` : parsed.data.notes,
+      created_by: auth.claims.sub,
+    };
 
-      const insertPromise = admin
-        .from("signage_promotions")
-        .insert(dbPayload)
-        .select()
-        .single();
+    const { data, error } = await admin
+      .from("signage_promotions")
+      .insert(dbPayload)
+      .select()
+      .single();
 
-      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: new Error("DB timeout") }), 3000)
-      );
+    if (!error && data) {
+      await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
 
-      const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
+      // Add to default playlist in Supabase
+      try {
+        const { data: defaultPl } = await admin
+          .from("signage_playlists")
+          .select("id")
+          .eq("is_default", true)
+          .single();
+        if (defaultPl) {
+          await admin.from("signage_playlist_items").insert({
+            playlist_id: defaultPl.id,
+            promotion_id: data.id,
+            position: 1,
+            enabled: true,
+          });
+        }
+      } catch {}
 
-      if (!error && data) {
-        await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
+      // AUTO-SYNC: Fetch all active promotions to generate a fresh cloud publish snapshot
+      try {
+        const { data: allActive } = await admin
+          .from("signage_promotions")
+          .select("*, media:signage_media(*)")
+          .neq("status", "archived")
+          .eq("enabled", true)
+          .order("created_at", { ascending: false });
 
-        // Also add to default playlist in Supabase
-        try {
-          const { data: defaultPl } = await admin
-            .from("signage_playlists")
-            .select("id")
-            .eq("is_default", true)
-            .single();
-          if (defaultPl) {
-            await admin.from("signage_playlist_items").insert({
-              playlist_id: defaultPl.id,
-              promotion_id: data.id,
-              position: 1,
-              enabled: true,
-            });
-          }
-        } catch {}
+        const { data: lastVer } = await admin
+          .from("signage_publish_versions")
+          .select("version_no")
+          .order("version_no", { ascending: false })
+          .limit(1)
+          .single();
 
-        // Also save to devStore so both stores are 100% in sync
-        devStore.addPromotion({
-          ...parsed.data,
-          status: parsed.data.status || "live",
-          enabled: parsed.data.enabled ?? true,
+        const nextVer = (lastVer?.version_no || 0) + 1;
+
+        const liveSlides = (allActive || []).map((p: any) => {
+          const img =
+            p.media?.storage_path ||
+            p.media?.thumb_path ||
+            (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
+            p.media_id ||
+            "/kathua-fresh-logo.jpg";
+          return {
+            id: p.id,
+            promotion_id: p.id,
+            title: p.title || "Offer",
+            price_text: p.price_text,
+            duration_sec: p.duration_sec || 8,
+            image_url: img,
+          };
         });
 
-        data.media_id = customImg || mediaUuid || data.media_id;
-        data.media = {
-          id: mediaUuid || "media-custom",
-          storage_path: customImg || data.media_id,
-          thumb_path: customImg || data.media_id,
+        const finalSlides =
+          liveSlides.length === 1
+            ? [
+                liveSlides[0],
+                {
+                  id: "welcome-slide-brand",
+                  promotion_id: "promo-welcome-brand",
+                  title: "Kathua Fresh Store",
+                  price_text: "Quality Assured | Always Fresh",
+                  duration_sec: 8,
+                  image_url: "/kathua-fresh-logo.jpg",
+                },
+              ]
+            : liveSlides;
+
+        const newSnapshot = {
+          version: nextVer,
+          published_at: new Date().toISOString(),
+          branding: {
+            logo_url: "/kathua-fresh-logo.jpg",
+            website_text: "www.kathuafresh.in",
+            tagline: "Quality Assured | Always Fresh",
+            ticker_text:
+              "Welcome to Kathua Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Quality Guaranteed",
+            ticker_enabled: true,
+            layout_profile: "standard",
+          },
+          qr_codes: [
+            {
+              id: "qr-wa",
+              label: "WhatsApp Channel",
+              target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
+              caption: "Join for daily wholesale rates & deals",
+            },
+            {
+              id: "qr-ig",
+              label: "Instagram",
+              target_url: "https://www.instagram.com/kathua_fresh/",
+              caption: "Follow @kathua_fresh for daily offers",
+            },
+          ],
+          slides: finalSlides,
+          audio: {
+            enabled: devStore.audioSettings?.enabled ?? true,
+            url: devStore.audioSettings?.url ?? "/store-audio.mp3",
+            volume: (devStore.audioSettings?.volume ?? 80) / 100,
+            loop: devStore.audioSettings?.loop ?? true,
+            interval_sec: devStore.audioSettings?.interval_sec ?? 120,
+          },
         };
 
-        return successResponse({ promotion: data, ...data }, 201);
+        await admin.from("signage_publish_versions").insert({
+          version_no: nextVer,
+          snapshot: newSnapshot,
+          note: `Auto-published: ${parsed.data.title}`,
+          published_at: new Date().toISOString(),
+          published_by: auth.claims.sub,
+        });
+
+        devStore.version = nextVer;
+      } catch (autoErr) {
+        console.warn("Auto-publish version update warning:", autoErr);
       }
-    } catch (err) {
-      console.warn("Supabase promotion create fallback:", err);
+
+      // Also save to devStore memory so single-process calls remain consistent
+      devStore.addPromotion({
+        ...parsed.data,
+        status: parsed.data.status || "live",
+        enabled: parsed.data.enabled ?? true,
+      });
+
+      data.media_id = customImg || mediaUuid || data.media_id;
+      data.media = {
+        id: mediaUuid || "media-custom",
+        storage_path: customImg || data.media_id,
+        thumb_path: customImg || data.media_id,
+      };
+
+      return successResponse({ promotion: data, ...data }, 201);
     }
+  } catch (err) {
+    console.warn("Supabase promotion create fallback:", err);
   }
 
   // Fallback to devStore
