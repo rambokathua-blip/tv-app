@@ -60,7 +60,7 @@ export default function AdminSignageLayout({
             if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
               (window as any).AndroidSignage.switchMode("tv");
             } else {
-              window.open("/tv", "_blank");
+              window.location.href = "/tv";
             }
           }}
           className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition-all shadow-sm active:scale-95"

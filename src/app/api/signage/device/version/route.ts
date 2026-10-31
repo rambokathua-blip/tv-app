@@ -22,16 +22,19 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("signage_publish_versions")
-      .select("version_no, published_at")
+      .select("version_no, published_at, snapshot")
       .order("version_no", { ascending: false })
       .limit(1)
       .single();
 
     if (!error && data) {
+      const control = (data.snapshot as any)?.control || {};
       return NextResponse.json(
         {
           version: data.version_no,
           published_at: data.published_at,
+          is_paused: control.is_paused ?? false,
+          last_command: control.last_command ?? null,
         },
         {
           status: 200,
@@ -48,10 +51,13 @@ export async function GET(request: Request) {
   }
 
   devStore.load();
+  const fallbackControl = (devStore as any).control || {};
   return NextResponse.json(
     {
       version: devStore.version,
       published_at: new Date().toISOString(),
+      is_paused: fallbackControl.is_paused ?? false,
+      last_command: fallbackControl.last_command ?? null,
     },
     {
       status: 200,

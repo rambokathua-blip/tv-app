@@ -122,6 +122,17 @@ export default function TvPlayerPage() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [windowScale, setWindowScale] = useState(1);
 
+  const goToSlideRef = useRef<((idx: number) => void) | null>(null);
+  const isPausedRef = useRef(false);
+  const currentIndexRef = useRef(0);
+  const lastCommandTimeRef = useRef<number>(Date.now());
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
   // Dynamic uniform scaling with TV-Safe Area (98%) to fit 1920x1080 canvas without ANY clipping
   useEffect(() => {
     const applyScale = () => {
@@ -206,7 +217,15 @@ export default function TvPlayerPage() {
   // Listen for audio control messages from parent window (e.g. Admin Dashboard)
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
-      if (
+      if (e.data?.type === "PAUSE_TV") {
+        setIsPaused(true);
+      } else if (e.data?.type === "RESUME_TV") {
+        setIsPaused(false);
+      } else if (e.data?.type === "NEXT_SLIDE") {
+        goToSlideRef.current?.(currentIndexRef.current + 1);
+      } else if (e.data?.type === "PREV_SLIDE") {
+        goToSlideRef.current?.(currentIndexRef.current - 1);
+      } else if (
         e.data?.type === "MUTE_AUDIO" ||
         (e.data?.type === "TV_AUDIO_TOGGLE" && !e.data?.enabled)
       ) {
@@ -612,6 +631,20 @@ export default function TvPlayerPage() {
             manifestVersionRef.current = data.version;
             fetchManifest();
           }
+          if (typeof data.is_paused === "boolean" && data.is_paused !== isPausedRef.current) {
+            isPausedRef.current = data.is_paused;
+            setIsPaused(data.is_paused);
+          }
+          if (data.last_command && data.last_command.timestamp > lastCommandTimeRef.current) {
+            lastCommandTimeRef.current = data.last_command.timestamp;
+            if (data.last_command.action === "next") {
+              goToSlideRef.current?.(currentIndexRef.current + 1);
+            } else if (data.last_command.action === "pause") {
+              setIsPaused(true);
+            } else if (data.last_command.action === "resume") {
+              setIsPaused(false);
+            }
+          }
           setIsOffline(false);
         }
       } catch {
@@ -626,6 +659,28 @@ export default function TvPlayerPage() {
       syncChannel.onmessage = (event) => {
         if (event.data?.type === "TV_SYNC" || event.data?.type === "SYNC_OFFERS") {
           fetchManifest();
+        } else if (event.data?.type === "PAUSE_TV") {
+          setIsPaused(true);
+        } else if (event.data?.type === "RESUME_TV") {
+          setIsPaused(false);
+        } else if (event.data?.type === "NEXT_SLIDE") {
+          goToSlideRef.current?.(currentIndexRef.current + 1);
+        } else if (event.data?.type === "PREV_SLIDE") {
+          goToSlideRef.current?.(currentIndexRef.current - 1);
+        } else if (event.data?.type === "TV_AUDIO_TOGGLE") {
+          const enabled = event.data.enabled;
+          const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+          if (!isInIframe) {
+            setIsAudioMuted(!enabled);
+            if (audioRef.current) {
+              audioRef.current.muted = !enabled;
+              if (enabled) {
+                audioRef.current.play().catch(() => {});
+              } else {
+                audioRef.current.pause();
+              }
+            }
+          }
         }
       };
     } catch {}
@@ -838,6 +893,10 @@ export default function TvPlayerPage() {
       setPrevIndex(null);
     }, 950);
   }, [slides.length, isTransitioning, currentIndex]);
+
+  useEffect(() => {
+    goToSlideRef.current = goToSlide;
+  }, [goToSlide]);
 
   useEffect(() => {
     if (slides.length <= 1 || isPaused) return;
@@ -1155,6 +1214,37 @@ export default function TvPlayerPage() {
                 }}
               >
                 &ldquo;{activeBroadcast.text}&rdquo;
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Paused Indicator Overlay */}
+        {isPaused && (
+          <div
+            style={{
+              position: "absolute",
+              top: 24,
+              left: 24,
+              backgroundColor: "rgba(15, 23, 42, 0.9)",
+              border: "2px solid #f59e0b",
+              borderRadius: 20,
+              padding: "10px 22px",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              zIndex: 35,
+              boxShadow: "0 10px 25px rgba(0,0,0,0.7), 0 0 20px rgba(245, 158, 11, 0.4)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <span style={{ fontSize: 20 }}>⏸️</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#fbbf24", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Slideshow Paused
+              </div>
+              <div style={{ fontSize: 10, color: "#cbd5e1" }}>
+                Controlled by Shop Admin
               </div>
             </div>
           </div>
