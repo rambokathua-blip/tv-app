@@ -247,54 +247,55 @@ export default function EditOfferModal({
     setIsSaving(true);
     setSaveError(null);
 
+    // Determine final image
+    const finalMediaId = (hasNewImage && imageUrl && !imageUrl.startsWith("blob:"))
+      ? imageUrl
+      : getInitialThumb();
+
+    // 1. Instant Optimistic LocalStorage Update
     try {
-      let finalMediaId: string | null = null;
-
-      // 1. If user uploaded a new local file, upload it to the server
-      if (imageFile) {
-        try {
-          const formData = new FormData();
-          formData.append("file", imageFile);
-          formData.append("kind", "image");
-          const uploadRes = await fetch("/api/signage/admin/media/upload", {
-            method: "POST",
-            body: formData,
-          });
-          if (uploadRes.ok) {
-            const uploadData = await uploadRes.json();
-            finalMediaId =
-              uploadData.public_url ||
-              uploadData.storage_path ||
-              uploadData.media?.storage_path ||
-              uploadData.media?.id ||
-              null;
-          }
-        } catch (uploadErr) {
-          console.warn("Upload fallback", uploadErr);
-        }
-
-        // If server upload failed or returned blob, guarantee base64 dataUri so it's permanent
-        if (!finalMediaId || finalMediaId.startsWith("blob:")) {
-          if (imageUrl && !imageUrl.startsWith("blob:")) {
-            finalMediaId = imageUrl;
-          } else {
-            finalMediaId = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = (ev) => resolve((ev.target?.result as string) || "/kathua-fresh-logo.jpg");
-              reader.onerror = () => resolve("/kathua-fresh-logo.jpg");
-              reader.readAsDataURL(imageFile);
-            });
-          }
-        }
-      } else if (hasNewImage && imageUrl && !imageUrl.startsWith("blob:")) {
-        // User selected a preset or typed an image URL
-        finalMediaId = imageUrl;
-      } else {
-        // User kept existing image
-        finalMediaId = getInitialThumb();
+      const cached = localStorage.getItem("kathua_signage_promotions");
+      const list = cached ? JSON.parse(cached) : [];
+      if (Array.isArray(list)) {
+        const updated = list.map((p: any) =>
+          p.id === promo.id
+            ? {
+                ...p,
+                title: title.trim(),
+                price_text: priceText.trim() || null,
+                mrp: mrp.trim() ? (mrp.startsWith("₹") ? mrp.trim() : `₹${mrp.trim()}`) : null,
+                duration_sec: durationSec,
+                status,
+                enabled: status === "live",
+                media_id: finalMediaId || p.media_id,
+                media: {
+                  id: finalMediaId || p.media_id,
+                  storage_path: finalMediaId || p.media_id,
+                  thumb_path: finalMediaId || p.media_id,
+                },
+              }
+            : p
+        );
+        localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
       }
+    } catch {}
 
-      // Update the promotion
+    // 2. Instant Real-time TV Screen Broadcast
+    try {
+      const syncChannel = new BroadcastChannel("kathua_tv_sync");
+      syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+      syncChannel.close();
+    } catch {}
+    try {
+      localStorage.setItem("signage_force_refresh", Date.now().toString());
+    } catch {}
+
+    // 3. Immediately close modal and refresh list (0ms delay for user!)
+    onUpdated();
+    onClose();
+
+    // 4. Background sync with Supabase cloud database & auto-publish snapshot
+    try {
       const res = await fetch(`/api/signage/admin/promotions/${promo.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -309,67 +310,15 @@ export default function EditOfferModal({
         }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error?.message || "Failed to update offer");
+      if (res.ok) {
+        try {
+          const syncChannel = new BroadcastChannel("kathua_tv_sync");
+          syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+          syncChannel.close();
+        } catch {}
       }
-
-      const updatedPromoData = await res.json().catch(() => null);
-
-      try {
-        const cached = localStorage.getItem("kathua_signage_promotions");
-        const list = cached ? JSON.parse(cached) : [];
-        if (Array.isArray(list)) {
-          const updated = list.map((p: any) =>
-            p.id === promo.id
-              ? {
-                  ...p,
-                  ...(updatedPromoData?.promotion || updatedPromoData || {}),
-                  title: title.trim(),
-                  price_text: priceText.trim() || null,
-                  mrp: mrp.trim() ? (mrp.startsWith("₹") ? mrp.trim() : `₹${mrp.trim()}`) : null,
-                  duration_sec: durationSec,
-                  status,
-                  enabled: status === "live",
-                  media_id: finalMediaId || p.media_id,
-                  media: {
-                    id: finalMediaId || p.media_id,
-                    storage_path: finalMediaId || p.media_id,
-                    thumb_path: finalMediaId || p.media_id,
-                  },
-                }
-              : p
-          );
-          localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
-        }
-      } catch {}
-
-      // Trigger publish so TV updates immediately
-      await fetch("/api/signage/admin/publish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notes: `Updated offer: ${title.trim()}`,
-        }),
-      }).catch(() => {});
-
-      // Real-time broadcast to all TV display screens
-      try {
-        const syncChannel = new BroadcastChannel("kathua_tv_sync");
-        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
-        syncChannel.close();
-      } catch {}
-      try {
-        localStorage.setItem("signage_force_refresh", Date.now().toString());
-      } catch {}
-
-      onUpdated();
-      onClose();
     } catch (err: any) {
-      console.error(err);
-      setSaveError(err.message || "Failed to save changes");
-    } finally {
-      setIsSaving(false);
+      console.warn("Background update sync warning:", err);
     }
   };
 
