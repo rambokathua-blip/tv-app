@@ -113,6 +113,34 @@ export async function PUT(request: Request) {
           });
       }
     }
+    // Update latest publish version snapshot with fresh QR codes in Supabase
+    try {
+      const { data: lastVer } = await admin
+        .from("signage_publish_versions")
+        .select("version_no, snapshot")
+        .order("version_no", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastVer && lastVer.snapshot) {
+        const nextVer = (lastVer.version_no || 0) + 1;
+        const updatedSnapshot = {
+          ...lastVer.snapshot,
+          version: nextVer,
+          published_at: new Date().toISOString(),
+          qr_codes: qrList.filter((q: any) => q.enabled !== false),
+        };
+        await admin.from("signage_publish_versions").insert({
+          version_no: nextVer,
+          snapshot: updatedSnapshot,
+          note: "Updated QR codes",
+          published_at: new Date().toISOString(),
+          published_by: auth.claims.sub,
+        });
+      }
+    } catch (verErr) {
+      console.warn("Supabase QR publish version update fallback:", verErr);
+    }
   } catch (err) {
     console.warn("Supabase QR upsert fallback:", err);
   }
@@ -137,6 +165,33 @@ export async function DELETE(request: Request) {
   try {
     const admin = createAdminClient();
     await admin.from("signage_qr_codes").delete().eq("id", id);
+
+    // Update latest publish snapshot without deleted QR
+    try {
+      const { data: lastVer } = await admin
+        .from("signage_publish_versions")
+        .select("version_no, snapshot")
+        .order("version_no", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastVer && lastVer.snapshot) {
+        const nextVer = (lastVer.version_no || 0) + 1;
+        const updatedSnapshot = {
+          ...lastVer.snapshot,
+          version: nextVer,
+          published_at: new Date().toISOString(),
+          qr_codes: (lastVer.snapshot.qr_codes || []).filter((q: any) => q.id !== id),
+        };
+        await admin.from("signage_publish_versions").insert({
+          version_no: nextVer,
+          snapshot: updatedSnapshot,
+          note: `Deleted QR code: ${id}`,
+          published_at: new Date().toISOString(),
+          published_by: auth.claims.sub,
+        });
+      }
+    } catch {}
   } catch {
     // fallback
   }

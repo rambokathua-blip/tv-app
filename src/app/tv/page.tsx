@@ -486,6 +486,17 @@ export default function TvPlayerPage() {
           }
         }
       }
+
+      const rawQrs = localStorage.getItem("kathua_tv_qrs");
+      if (rawQrs) {
+        const localQrs = JSON.parse(rawQrs);
+        if (Array.isArray(localQrs) && localQrs.length > 0) {
+          baseManifest = {
+            ...baseManifest,
+            qr_codes: localQrs,
+          };
+        }
+      }
     } catch {}
 
     setManifest(baseManifest);
@@ -567,14 +578,36 @@ export default function TvPlayerPage() {
                   ]
                 : localSlides;
 
-            return {
+            let res = {
               ...manifestData,
               slides: finalSlides,
             };
+            const rawQrs = localStorage.getItem("kathua_tv_qrs");
+            if (rawQrs) {
+              const localQrs = JSON.parse(rawQrs);
+              if (Array.isArray(localQrs) && localQrs.length > 0) {
+                res.qr_codes = localQrs;
+              }
+            }
+            return res;
           }
         }
       }
     } catch {}
+
+    try {
+      const rawQrs = localStorage.getItem("kathua_tv_qrs");
+      if (rawQrs) {
+        const localQrs = JSON.parse(rawQrs);
+        if (Array.isArray(localQrs) && localQrs.length > 0) {
+          return {
+            ...manifestData,
+            qr_codes: localQrs,
+          };
+        }
+      }
+    } catch {}
+
     return manifestData;
   }, []);
 
@@ -1653,421 +1686,606 @@ export default function TvPlayerPage() {
         </div>
 
         {/* ========================================================== */}
-        {/* 2. CREATIVE IRRESISTIBLE SMART QR CARDS (WA & IG)          */}
+        {/* 2. CREATIVE IRRESISTIBLE SMART QR CARDS (WA, IG, CUSTOM)   */}
         {/* ========================================================== */}
-        <div
-          style={{
-            width: "100%",
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: 12,
-          }}
-        >
-          {(manifest.qr_codes || []).filter((q: any) => q.enabled !== false).map((qr) => {
-            const isWhatsApp =
-              qr.label.toLowerCase().includes("whatsapp") ||
-              qr.target_url.toLowerCase().includes("wa") ||
-              qr.target_url.toLowerCase().includes("whatsapp");
+        {(() => {
+          const activeQrs = (manifest.qr_codes || []).filter((q: any) => q.enabled !== false);
+          const qrCount = activeQrs.length;
+          const isCompact = qrCount >= 3;
 
-            const isInstagram =
-              qr.label.toLowerCase().includes("instagram") ||
-              qr.target_url.toLowerCase().includes("instagram") ||
-              qr.target_url.toLowerCase().includes("ig");
+          return (
+            <div
+              style={{
+                width: "100%",
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: isCompact ? "space-around" : "space-between",
+                gap: isCompact ? 8 : 12,
+                overflowY: qrCount > 3 ? "auto" : "visible",
+                maxHeight: "100%",
+                scrollbarWidth: "none",
+              }}
+            >
+              {activeQrs.map((qr) => {
+                const isWhatsApp =
+                  qr.label.toLowerCase().includes("whatsapp") ||
+                  qr.target_url.toLowerCase().includes("wa") ||
+                  qr.target_url.toLowerCase().includes("whatsapp");
 
-            const theme = isWhatsApp
-              ? {
-                  cardBg:
-                    "linear-gradient(155deg, rgba(7, 94, 84, 0.42) 0%, rgba(18, 140, 126, 0.22) 45%, rgba(4, 20, 15, 0.9) 100%)",
-                  cardBorder: "rgba(37, 211, 102, 0.45)",
-                  cardGlow: "rgba(37, 211, 102, 0.22)",
-                  badgeBg: "#25D366",
-                  badgeShadow: "0 4px 14px rgba(37, 211, 102, 0.45)",
-                  cornerColor: "#25D366",
-                  btnBg: "linear-gradient(90deg, #128C7E 0%, #25D366 100%)",
-                  btnShadow: "0 4px 16px rgba(37, 211, 102, 0.35)",
-                  title: "WHATSAPP CHANNEL",
-                  subtitle: "Daily Wholesale Mandi Rates",
-                  chip: "JOIN FREE",
-                  chipColor: "#25D366",
-                  ctaText: "Point Camera to Join",
-                  fallbackImg: "/qr-whatsapp.png",
-                  logoSvg: (
-                    <svg viewBox="0 0 32 32" width="22" height="22" fill="#ffffff">
-                      <path d="M16 2C8.28 2 2 8.28 2 16c0 2.72.78 5.26 2.12 7.42L2 30l6.76-2.08C10.84 29.18 13.34 30 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2zm8.16 20.12c-.34.96-1.7 1.76-2.78 1.98-.74.16-1.72.28-4.96-1.06-4.16-1.72-6.84-5.96-7.04-6.24-.22-.28-1.7-2.26-1.7-4.32s1.08-3.08 1.46-3.5c.38-.42.84-.52 1.12-.52.28 0 .56 0 .8.02.26.02.6-.1.94.72.34.84 1.18 2.88 1.28 3.08.1.22.16.48.02.76-.14.28-.22.46-.42.7-.2.24-.44.52-.62.7-.2.24-.42.42-.18.82.24.4 1.06 1.76 2.3 2.86 1.58 1.42 2.92 1.86 3.34 2.06.42.2.66.18.9-.1.26-.28 1.08-1.26 1.36-1.7.3-.42.58-.36.98-.2.4.16 2.54 1.2 2.98 1.42.44.22.74.34.84.52.12.2.12 1.14-.22 2.1z" />
-                    </svg>
-                  ),
-                  centerLogo: (
-                    <div
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: "50%",
-                        backgroundColor: "#25D366",
-                        border: "2.5px solid #ffffff",
-                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <svg viewBox="0 0 32 32" width="18" height="18" fill="#ffffff">
-                        <path d="M16 2C8.28 2 2 8.28 2 16c0 2.72.78 5.26 2.12 7.42L2 30l6.76-2.08C10.84 29.18 13.34 30 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2zm8.16 20.12c-.34.96-1.7 1.76-2.78 1.98-.74.16-1.72.28-4.96-1.06-4.16-1.72-6.84-5.96-7.04-6.24-.22-.28-1.7-2.26-1.7-4.32s1.08-3.08 1.46-3.5c.38-.42.84-.52 1.12-.52.28 0 .56 0 .8.02.26.02.6-.1.94.72.34.84 1.18 2.88 1.28 3.08.1.22.16.48.02.76-.14.28-.22.46-.42.7-.2.24-.44.52-.62.7-.2.24-.42.42-.18.82.24.4 1.06 1.76 2.3 2.86 1.58 1.42 2.92 1.86 3.34 2.06.42.2.66.18.9-.1.26-.28 1.08-1.26 1.36-1.7.3-.42.58-.36.98-.2.4.16 2.54 1.2 2.98 1.42.44.22.74.34.84.52.12.2.12 1.14-.22 2.1z" />
-                      </svg>
-                    </div>
-                  ),
-                }
-              : isInstagram
-              ? {
-                  cardBg:
-                    "linear-gradient(155deg, rgba(131, 58, 180, 0.38) 0%, rgba(253, 29, 29, 0.22) 45%, rgba(20, 10, 28, 0.9) 100%)",
-                  cardBorder: "rgba(253, 29, 29, 0.45)",
-                  cardGlow: "rgba(253, 29, 29, 0.22)",
-                  badgeBg: "linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
-                  badgeShadow: "0 4px 14px rgba(253, 29, 29, 0.45)",
-                  cornerColor: "#FD1D1D",
-                  btnBg: "linear-gradient(90deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
-                  btnShadow: "0 4px 16px rgba(253, 29, 29, 0.35)",
-                  title: "INSTAGRAM REELS",
-                  subtitle: "@kathua_fresh • Offers & Stories",
-                  chip: "FOLLOW",
-                  chipColor: "#FD1D1D",
-                  ctaText: "Point Camera to Follow",
-                  fallbackImg: "/qr-instagram.jpg",
-                  logoSvg: (
-                    <svg viewBox="0 0 32 32" width="22" height="22" fill="#ffffff">
-                      <path d="M16 4.9c3.6 0 4 .02 5.4.08 3.5.16 5.1 1.74 5.2 5.2.06 1.4.08 1.8.08 5.4s-.02 4-.08 5.4c-.16 3.5-1.74 5.1-5.2 5.2-1.4.06-1.8.08-5.4.08s-4-.02-5.4-.08c-3.5-.16-5.1-1.74-5.2-5.2-.06-1.4-.08-1.8-.08-5.4s.02-4 .08-5.4c.16-3.5 1.74-5.1 5.2-5.2 1.4-.06 1.8-.08 5.4-.08m0-2.9c-3.7 0-4.1.02-5.6.08-4.8.22-7.4 2.83-7.6 7.6-.07 1.5-.09 1.9-.09 5.6s.02 4.1.08 5.6c.22 4.8 2.83 7.4 7.6 7.6 1.5.07 1.9.09 5.6.09s4.1-.02 5.6-.08c4.8-.22 7.4-2.83 7.6-7.6.07-1.5.09-1.9.09-5.6s-.02-4.1-.08-5.6c-.22-4.8-2.83-7.4-7.6-7.6-1.5-.07-1.9-.09-5.6-.09z" />
-                      <path d="M16 9.3c-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7-3-6.7-6.7-6.7zm0 10.7c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
-                      <circle cx="23" cy="9" r="1.6" />
-                    </svg>
-                  ),
-                  centerLogo: (
-                    <div
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 10,
-                        background: "linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
-                        border: "2.5px solid #ffffff",
-                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <svg viewBox="0 0 32 32" width="18" height="18" fill="#ffffff">
-                        <path d="M16 4.9c3.6 0 4 .02 5.4.08 3.5.16 5.1 1.74 5.2 5.2.06 1.4.08 1.8.08 5.4s-.02 4-.08 5.4c-.16 3.5-1.74 5.1-5.2 5.2-1.4.06-1.8.08-5.4.08s-4-.02-5.4-.08c-3.5-.16-5.1-1.74-5.2-5.2-.06-1.4-.08-1.8-.08-5.4s.02-4 .08-5.4c.16-3.5 1.74-5.1 5.2-5.2 1.4-.06 1.8-.08 5.4-.08m0-2.9c-3.7 0-4.1.02-5.6.08-4.8.22-7.4 2.83-7.6 7.6-.07 1.5-.09 1.9-.09 5.6s.02 4.1.08 5.6c.22 4.8 2.83 7.4 7.6 7.6 1.5.07 1.9.09 5.6.09s4.1-.02 5.6-.08c4.8-.22 7.4-2.83 7.6-7.6.07-1.5.09-1.9.09-5.6s-.02-4.1-.08-5.6c-.22-4.8-2.83-7.4-7.6-7.6-1.5-.07-1.9-.09-5.6-.09z" />
-                        <path d="M16 9.3c-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7-3-6.7-6.7-6.7zm0 10.7c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
-                        <circle cx="23" cy="9" r="1.6" />
-                      </svg>
-                    </div>
-                  ),
-                }
-              : {
-                  cardBg:
-                    "linear-gradient(155deg, rgba(6, 78, 59, 0.4) 0%, rgba(13, 148, 136, 0.2) 45%, rgba(6, 20, 25, 0.9) 100%)",
-                  cardBorder: "rgba(16, 185, 129, 0.4)",
-                  cardGlow: "rgba(16, 185, 129, 0.2)",
-                  badgeBg: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
-                  badgeShadow: "0 4px 14px rgba(5, 150, 105, 0.4)",
-                  cornerColor: "#10b981",
-                  btnBg: "linear-gradient(90deg, #059669 0%, #10b981 100%)",
-                  btnShadow: "0 4px 16px rgba(16, 185, 129, 0.35)",
-                  title: qr.label.toUpperCase(),
-                  subtitle: qr.caption || "Scan with phone camera",
-                  chip: "SCAN",
-                  chipColor: "#10b981",
-                  ctaText: "Point Camera to Scan",
-                  fallbackImg: undefined,
-                  logoSvg: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5">
-                      <rect width="18" height="18" x="3" y="3" rx="2" />
-                      <path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01" />
-                    </svg>
-                  ),
-                  centerLogo: undefined,
-                };
+                const isInstagram =
+                  qr.label.toLowerCase().includes("instagram") ||
+                  qr.target_url.toLowerCase().includes("instagram") ||
+                  qr.target_url.toLowerCase().includes("ig");
 
-            return (
-              <div
-                key={qr.id}
-                style={{
-                  width: "100%",
-                  borderRadius: 22,
-                  background: theme.cardBg,
-                  border: `1.5px solid ${theme.cardBorder}`,
-                  boxShadow: `0 14px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 22px ${theme.cardGlow}`,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  padding: "12px 14px 10px",
-                  position: "relative",
-                  backdropFilter: "blur(14px)",
-                }}
-              >
-                {/* 1. Card Header with Big Authentic App Logo & Details */}
-                <div
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    marginBottom: 10,
-                  }}
-                >
-                  {/* Big Authentic Logo Icon Badge */}
+                const isYouTube =
+                  qr.label.toLowerCase().includes("youtube") ||
+                  qr.target_url.toLowerCase().includes("youtube") ||
+                  qr.target_url.toLowerCase().includes("youtu.be");
+
+                const isPay =
+                  qr.label.toLowerCase().includes("pay") ||
+                  qr.label.toLowerCase().includes("upi") ||
+                  qr.target_url.toLowerCase().includes("upi") ||
+                  qr.target_url.toLowerCase().includes("gpay") ||
+                  qr.target_url.toLowerCase().includes("phonepe");
+
+                const isReview =
+                  qr.label.toLowerCase().includes("review") ||
+                  qr.label.toLowerCase().includes("rating") ||
+                  qr.label.toLowerCase().includes("google") ||
+                  qr.label.toLowerCase().includes("maps");
+
+                const theme = isWhatsApp
+                  ? {
+                      cardBg:
+                        "linear-gradient(155deg, rgba(7, 94, 84, 0.42) 0%, rgba(18, 140, 126, 0.22) 45%, rgba(4, 20, 15, 0.9) 100%)",
+                      cardBorder: "rgba(37, 211, 102, 0.45)",
+                      cardGlow: "rgba(37, 211, 102, 0.22)",
+                      badgeBg: "#25D366",
+                      badgeShadow: "0 4px 14px rgba(37, 211, 102, 0.45)",
+                      cornerColor: "#25D366",
+                      btnBg: "linear-gradient(90deg, #128C7E 0%, #25D366 100%)",
+                      btnShadow: "0 4px 16px rgba(37, 211, 102, 0.35)",
+                      title: "WHATSAPP CHANNEL",
+                      subtitle: "Daily Wholesale Mandi Rates",
+                      chip: "JOIN FREE",
+                      chipColor: "#25D366",
+                      ctaText: "Point Camera to Join",
+                      fallbackImg: "/qr-whatsapp.png",
+                      logoSvg: (
+                        <svg viewBox="0 0 32 32" width="22" height="22" fill="#ffffff">
+                          <path d="M16 2C8.28 2 2 8.28 2 16c0 2.72.78 5.26 2.12 7.42L2 30l6.76-2.08C10.84 29.18 13.34 30 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2zm8.16 20.12c-.34.96-1.7 1.76-2.78 1.98-.74.16-1.72.28-4.96-1.06-4.16-1.72-6.84-5.96-7.04-6.24-.22-.28-1.7-2.26-1.7-4.32s1.08-3.08 1.46-3.5c.38-.42.84-.52 1.12-.52.28 0 .56 0 .8.02.26.02.6-.1.94.72.34.84 1.18 2.88 1.28 3.08.1.22.16.48.02.76-.14.28-.22.46-.42.7-.2.24-.44.52-.62.7-.2.24-.42.42-.18.82.24.4 1.06 1.76 2.3 2.86 1.58 1.42 2.92 1.86 3.34 2.06.42.2.66.18.9-.1.26-.28 1.08-1.26 1.36-1.7.3-.42.58-.36.98-.2.4.16 2.54 1.2 2.98 1.42.44.22.74.34.84.52.12.2.12 1.14-.22 2.1z" />
+                        </svg>
+                      ),
+                      centerLogo: (
+                        <div
+                          style={{
+                            width: isCompact ? 24 : 34,
+                            height: isCompact ? 24 : 34,
+                            borderRadius: "50%",
+                            backgroundColor: "#25D366",
+                            border: `${isCompact ? 1.5 : 2.5}px solid #ffffff`,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <svg viewBox="0 0 32 32" width={isCompact ? 13 : 18} height={isCompact ? 13 : 18} fill="#ffffff">
+                            <path d="M16 2C8.28 2 2 8.28 2 16c0 2.72.78 5.26 2.12 7.42L2 30l6.76-2.08C10.84 29.18 13.34 30 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2zm8.16 20.12c-.34.96-1.7 1.76-2.78 1.98-.74.16-1.72.28-4.96-1.06-4.16-1.72-6.84-5.96-7.04-6.24-.22-.28-1.7-2.26-1.7-4.32s1.08-3.08 1.46-3.5c.38-.42.84-.52 1.12-.52.28 0 .56 0 .8.02.26.02.6-.1.94.72.34.84 1.18 2.88 1.28 3.08.1.22.16.48.02.76-.14.28-.22.46-.42.7-.2.24-.44.52-.62.7-.2.24-.42.42-.18.82.24.4 1.06 1.76 2.3 2.86 1.58 1.42 2.92 1.86 3.34 2.06.42.2.66.18.9-.1.26-.28 1.08-1.26 1.36-1.7.3-.42.58-.36.98-.2.4.16 2.54 1.2 2.98 1.42.44.22.74.34.84.52.12.2.12 1.14-.22 2.1z" />
+                          </svg>
+                        </div>
+                      ),
+                    }
+                  : isInstagram
+                  ? {
+                      cardBg:
+                        "linear-gradient(155deg, rgba(131, 58, 180, 0.38) 0%, rgba(253, 29, 29, 0.22) 45%, rgba(20, 10, 28, 0.9) 100%)",
+                      cardBorder: "rgba(253, 29, 29, 0.45)",
+                      cardGlow: "rgba(253, 29, 29, 0.22)",
+                      badgeBg: "linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
+                      badgeShadow: "0 4px 14px rgba(253, 29, 29, 0.45)",
+                      cornerColor: "#FD1D1D",
+                      btnBg: "linear-gradient(90deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
+                      btnShadow: "0 4px 16px rgba(253, 29, 29, 0.35)",
+                      title: "INSTAGRAM REELS",
+                      subtitle: "@kathua_fresh • Offers & Stories",
+                      chip: "FOLLOW",
+                      chipColor: "#FD1D1D",
+                      ctaText: "Point Camera to Follow",
+                      fallbackImg: "/qr-instagram.jpg",
+                      logoSvg: (
+                        <svg viewBox="0 0 32 32" width="22" height="22" fill="#ffffff">
+                          <path d="M16 4.9c3.6 0 4 .02 5.4.08 3.5.16 5.1 1.74 5.2 5.2.06 1.4.08 1.8.08 5.4s-.02 4-.08 5.4c-.16 3.5-1.74 5.1-5.2 5.2-1.4.06-1.8.08-5.4.08s-4-.02-5.4-.08c-3.5-.16-5.1-1.74-5.2-5.2-.06-1.4-.08-1.8-.08-5.4s.02-4 .08-5.4c.16-3.5 1.74-5.1 5.2-5.2 1.4-.06 1.8-.08 5.4-.08m0-2.9c-3.7 0-4.1.02-5.6.08-4.8.22-7.4 2.83-7.6 7.6-.07 1.5-.09 1.9-.09 5.6s.02 4.1.08 5.6c.22 4.8 2.83 7.4 7.6 7.6 1.5.07 1.9.09 5.6.09s4.1-.02 5.6-.08c4.8-.22 7.4-2.83 7.6-7.6.07-1.5.09-1.9.09-5.6s-.02-4.1-.08-5.6c-.22-4.8-2.83-7.4-7.6-7.6-1.5-.07-1.9-.09-5.6-.09z" />
+                          <path d="M16 9.3c-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7-3-6.7-6.7-6.7zm0 10.7c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
+                          <circle cx="23" cy="9" r="1.6" />
+                        </svg>
+                      ),
+                      centerLogo: (
+                        <div
+                          style={{
+                            width: isCompact ? 24 : 34,
+                            height: isCompact ? 24 : 34,
+                            borderRadius: isCompact ? 7 : 10,
+                            background: "linear-gradient(135deg, #833AB4 0%, #FD1D1D 50%, #FCB045 100%)",
+                            border: `${isCompact ? 1.5 : 2.5}px solid #ffffff`,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <svg viewBox="0 0 32 32" width={isCompact ? 13 : 18} height={isCompact ? 13 : 18} fill="#ffffff">
+                            <path d="M16 4.9c3.6 0 4 .02 5.4.08 3.5.16 5.1 1.74 5.2 5.2.06 1.4.08 1.8.08 5.4s-.02 4-.08 5.4c-.16 3.5-1.74 5.1-5.2 5.2-1.4.06-1.8.08-5.4.08s-4-.02-5.4-.08c-3.5-.16-5.1-1.74-5.2-5.2-.06-1.4-.08-1.8-.08-5.4s.02-4 .08-5.4c.16-3.5 1.74-5.1 5.2-5.2 1.4-.06 1.8-.08 5.4-.08m0-2.9c-3.7 0-4.1.02-5.6.08-4.8.22-7.4 2.83-7.6 7.6-.07 1.5-.09 1.9-.09 5.6s.02 4.1.08 5.6c.22 4.8 2.83 7.4 7.6 7.6 1.5.07 1.9.09 5.6.09s4.1-.02 5.6-.08c4.8-.22 7.4-2.83 7.6-7.6.07-1.5.09-1.9.09-5.6s-.02-4.1-.08-5.6c-.22-4.8-2.83-7.4-7.6-7.6-1.5-.07-1.9-.09-5.6-.09z" />
+                            <path d="M16 9.3c-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7-3-6.7-6.7-6.7zm0 10.7c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
+                            <circle cx="23" cy="9" r="1.6" />
+                          </svg>
+                        </div>
+                      ),
+                    }
+                  : isYouTube
+                  ? {
+                      cardBg:
+                        "linear-gradient(155deg, rgba(220, 38, 38, 0.4) 0%, rgba(185, 28, 28, 0.22) 45%, rgba(20, 5, 5, 0.9) 100%)",
+                      cardBorder: "rgba(239, 68, 68, 0.45)",
+                      cardGlow: "rgba(239, 68, 68, 0.22)",
+                      badgeBg: "#FF0000",
+                      badgeShadow: "0 4px 14px rgba(239, 68, 68, 0.45)",
+                      cornerColor: "#ef4444",
+                      btnBg: "linear-gradient(90deg, #dc2626 0%, #ef4444 100%)",
+                      btnShadow: "0 4px 16px rgba(239, 68, 68, 0.35)",
+                      title: qr.label.toUpperCase(),
+                      subtitle: qr.caption || "Subscribe for recipes & deals",
+                      chip: "WATCH",
+                      chipColor: "#ef4444",
+                      ctaText: "Point Camera to Watch",
+                      fallbackImg: undefined,
+                      logoSvg: (
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="#ffffff">
+                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                        </svg>
+                      ),
+                      centerLogo: (
+                        <div
+                          style={{
+                            width: isCompact ? 24 : 34,
+                            height: isCompact ? 24 : 34,
+                            borderRadius: isCompact ? 7 : 10,
+                            backgroundColor: "#FF0000",
+                            border: `${isCompact ? 1.5 : 2.5}px solid #ffffff`,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" width={isCompact ? 13 : 18} height={isCompact ? 13 : 18} fill="#ffffff">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </div>
+                      ),
+                    }
+                  : isPay
+                  ? {
+                      cardBg:
+                        "linear-gradient(155deg, rgba(2, 132, 199, 0.42) 0%, rgba(14, 165, 233, 0.22) 45%, rgba(5, 15, 30, 0.9) 100%)",
+                      cardBorder: "rgba(56, 189, 248, 0.45)",
+                      cardGlow: "rgba(56, 189, 248, 0.22)",
+                      badgeBg: "#0284c7",
+                      badgeShadow: "0 4px 14px rgba(2, 132, 199, 0.45)",
+                      cornerColor: "#38bdf8",
+                      btnBg: "linear-gradient(90deg, #0284c7 0%, #38bdf8 100%)",
+                      btnShadow: "0 4px 16px rgba(2, 132, 199, 0.35)",
+                      title: qr.label.toUpperCase(),
+                      subtitle: qr.caption || "GPay • PhonePe • Paytm • UPI",
+                      chip: "PAY",
+                      chipColor: "#38bdf8",
+                      ctaText: "Point Camera to Pay",
+                      fallbackImg: undefined,
+                      logoSvg: (
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ffffff" strokeWidth="2.5">
+                          <rect width="20" height="14" x="2" y="5" rx="2" />
+                          <line x1="2" x2="22" y1="10" y2="10" />
+                        </svg>
+                      ),
+                      centerLogo: (
+                        <div
+                          style={{
+                            width: isCompact ? 24 : 34,
+                            height: isCompact ? 24 : 34,
+                            borderRadius: "50%",
+                            backgroundColor: "#0284c7",
+                            border: `${isCompact ? 1.5 : 2.5}px solid #ffffff`,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <span style={{ fontSize: isCompact ? 12 : 16, color: "#ffffff", fontWeight: 900 }}>₹</span>
+                        </div>
+                      ),
+                    }
+                  : isReview
+                  ? {
+                      cardBg:
+                        "linear-gradient(155deg, rgba(217, 119, 6, 0.4) 0%, rgba(245, 158, 11, 0.22) 45%, rgba(25, 15, 5, 0.9) 100%)",
+                      cardBorder: "rgba(251, 191, 36, 0.45)",
+                      cardGlow: "rgba(251, 191, 36, 0.22)",
+                      badgeBg: "linear-gradient(135deg, #4285F4 0%, #EA4335 33%, #FBBC05 66%, #34A853 100%)",
+                      badgeShadow: "0 4px 14px rgba(251, 191, 36, 0.45)",
+                      cornerColor: "#f59e0b",
+                      btnBg: "linear-gradient(90deg, #d97706 0%, #f59e0b 100%)",
+                      btnShadow: "0 4px 16px rgba(245, 158, 11, 0.35)",
+                      title: qr.label.toUpperCase(),
+                      subtitle: qr.caption || "Rate us on Google Maps",
+                      chip: "5.0 ★",
+                      chipColor: "#fbbf24",
+                      ctaText: "Point Camera to Rate",
+                      fallbackImg: undefined,
+                      logoSvg: (
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="#ffffff">
+                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                        </svg>
+                      ),
+                      centerLogo: (
+                        <div
+                          style={{
+                            width: isCompact ? 24 : 34,
+                            height: isCompact ? 24 : 34,
+                            borderRadius: "50%",
+                            backgroundColor: "#f59e0b",
+                            border: `${isCompact ? 1.5 : 2.5}px solid #ffffff`,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <span style={{ fontSize: isCompact ? 11 : 15, color: "#ffffff" }}>⭐</span>
+                        </div>
+                      ),
+                    }
+                  : {
+                      cardBg:
+                        "linear-gradient(155deg, rgba(6, 78, 59, 0.4) 0%, rgba(13, 148, 136, 0.2) 45%, rgba(6, 20, 25, 0.9) 100%)",
+                      cardBorder: "rgba(16, 185, 129, 0.4)",
+                      cardGlow: "rgba(16, 185, 129, 0.2)",
+                      badgeBg: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
+                      badgeShadow: "0 4px 14px rgba(5, 150, 105, 0.4)",
+                      cornerColor: "#10b981",
+                      btnBg: "linear-gradient(90deg, #059669 0%, #10b981 100%)",
+                      btnShadow: "0 4px 16px rgba(16, 185, 129, 0.35)",
+                      title: qr.label.toUpperCase(),
+                      subtitle: qr.caption || "Scan with phone camera",
+                      chip: "SCAN",
+                      chipColor: "#10b981",
+                      ctaText: "Point Camera to Scan",
+                      fallbackImg: undefined,
+                      logoSvg: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5">
+                          <rect width="18" height="18" x="3" y="3" rx="2" />
+                          <path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01" />
+                        </svg>
+                      ),
+                      centerLogo: (
+                        <div
+                          style={{
+                            width: isCompact ? 24 : 34,
+                            height: isCompact ? 24 : 34,
+                            borderRadius: isCompact ? 6 : 8,
+                            backgroundColor: "#10b981",
+                            border: `${isCompact ? 1.5 : 2.5}px solid #ffffff`,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <span style={{ fontSize: isCompact ? 10 : 13 }}>🛒</span>
+                        </div>
+                      ),
+                    };
+
+                return (
                   <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: isInstagram ? 12 : "50%",
-                      background: theme.badgeBg,
-                      boxShadow: theme.badgeShadow,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {theme.logoSvg}
-                  </div>
-
-                  {/* Header Title & Subtext */}
-                  <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 900,
-                        color: "#ffffff",
-                        letterSpacing: 0.8,
-                        lineHeight: 1.15,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {theme.title}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: isWhatsApp ? "#86efac" : isInstagram ? "#f9a8d4" : "#cbd5e1",
-                        fontWeight: 700,
-                        lineHeight: 1.2,
-                        marginTop: 2,
-                      }}
-                    >
-                      {theme.subtitle}
-                    </div>
-                  </div>
-
-                  {/* Top-Right Action Chip */}
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 900,
-                      color: "#ffffff",
-                      backgroundColor: "rgba(0, 0, 0, 0.4)",
-                      border: `1px solid ${theme.chipColor}`,
-                      padding: "3px 8px",
-                      borderRadius: 10,
-                      letterSpacing: 1,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        backgroundColor: theme.chipColor,
-                        display: "inline-block",
-                      }}
-                    />
-                    {theme.chip}
-                  </div>
-                </div>
-
-                {/* 2. QR Code Frame with Camera Viewfinder Brackets & Center Logo */}
-                <div
-                  style={{
-                    position: "relative",
-                    width: 172,
-                    height: 172,
-                    padding: 8,
-                    backgroundColor: "#ffffff",
-                    borderRadius: 18,
-                    boxShadow: "0 10px 26px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.08)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {/* Viewfinder Top-Left Bracket */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: -4,
-                      left: -4,
-                      width: 20,
-                      height: 20,
-                      borderTop: `3.5px solid ${theme.cornerColor}`,
-                      borderLeft: `3.5px solid ${theme.cornerColor}`,
-                      borderTopLeftRadius: 8,
-                    }}
-                  />
-                  {/* Viewfinder Top-Right Bracket */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: -4,
-                      right: -4,
-                      width: 20,
-                      height: 20,
-                      borderTop: `3.5px solid ${theme.cornerColor}`,
-                      borderRight: `3.5px solid ${theme.cornerColor}`,
-                      borderTopRightRadius: 8,
-                    }}
-                  />
-                  {/* Viewfinder Bottom-Left Bracket */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: -4,
-                      left: -4,
-                      width: 20,
-                      height: 20,
-                      borderBottom: `3.5px solid ${theme.cornerColor}`,
-                      borderLeft: `3.5px solid ${theme.cornerColor}`,
-                      borderBottomLeftRadius: 8,
-                    }}
-                  />
-                  {/* Viewfinder Bottom-Right Bracket */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: -4,
-                      right: -4,
-                      width: 20,
-                      height: 20,
-                      borderBottom: `3.5px solid ${theme.cornerColor}`,
-                      borderRight: `3.5px solid ${theme.cornerColor}`,
-                      borderBottomRightRadius: 8,
-                    }}
-                  />
-
-                  {/* QR SVG Render / Fallback Image */}
-                  {qrSvgMap[qr.id] ? (
-                    <div
-                      className="tv-qr-container"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                      dangerouslySetInnerHTML={{ __html: qrSvgMap[qr.id] }}
-                    />
-                  ) : theme.fallbackImg ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={theme.fallbackImg}
-                      alt={qr.label}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        borderRadius: 8,
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: "100%",
-                        fontSize: 12,
-                        color: "#64748b",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Loading QR...
-                    </div>
-                  )}
-
-                  {/* Centered Brand Watermark Badge Inside QR Code */}
-                  {theme.centerLogo && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        transform: "translate(-50%, -50%)",
-                        zIndex: 5,
-                        pointerEvents: "none",
-                      }}
-                    >
-                      {theme.centerLogo}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Irresistible Call-To-Action Button Pill */}
-                <div
-                  style={{
-                    width: "100%",
-                    marginTop: 10,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 3,
-                  }}
-                >
-                  <div
+                    key={qr.id}
                     style={{
                       width: "100%",
-                      padding: "6px 12px",
-                      borderRadius: 14,
-                      background: theme.btnBg,
-                      boxShadow: theme.btnShadow,
+                      borderRadius: isCompact ? 16 : 22,
+                      background: theme.cardBg,
+                      border: `1.5px solid ${theme.cardBorder}`,
+                      boxShadow: isCompact
+                        ? `0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 14px ${theme.cardGlow}`
+                        : `0 14px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 22px ${theme.cardGlow}`,
                       display: "flex",
+                      flexDirection: "column",
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6,
-                      color: "#ffffff",
+                      padding: isCompact ? "7px 10px 6px" : "12px 14px 10px",
+                      position: "relative",
+                      backdropFilter: "blur(14px)",
                     }}
                   >
-                    <span style={{ fontSize: 13 }}>📷</span>
-                    <span
+                    {/* 1. Card Header */}
+                    <div
                       style={{
-                        fontSize: 12,
-                        fontWeight: 900,
-                        letterSpacing: 0.8,
-                        textTransform: "uppercase",
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: isCompact ? 8 : 12,
+                        marginBottom: isCompact ? 5 : 10,
                       }}
                     >
-                      {theme.ctaText}
-                    </span>
+                      {/* Logo Icon Badge */}
+                      <div
+                        style={{
+                          width: isCompact ? 28 : 40,
+                          height: isCompact ? 28 : 40,
+                          borderRadius: isInstagram ? (isCompact ? 8 : 12) : "50%",
+                          background: theme.badgeBg,
+                          boxShadow: theme.badgeShadow,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isCompact ? (
+                          <div style={{ transform: "scale(0.72)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {theme.logoSvg}
+                          </div>
+                        ) : (
+                          theme.logoSvg
+                        )}
+                      </div>
+
+                      {/* Header Title & Subtext */}
+                      <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: isCompact ? 11 : 15,
+                            fontWeight: 900,
+                            color: "#ffffff",
+                            letterSpacing: isCompact ? 0.4 : 0.8,
+                            lineHeight: 1.15,
+                            textTransform: "uppercase",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {theme.title}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: isCompact ? 9 : 11,
+                            color: isWhatsApp ? "#86efac" : isInstagram ? "#f9a8d4" : isYouTube ? "#fca5a5" : isPay ? "#7dd3fc" : isReview ? "#fde68a" : "#cbd5e1",
+                            fontWeight: 700,
+                            lineHeight: 1.2,
+                            marginTop: isCompact ? 1 : 2,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {theme.subtitle}
+                        </div>
+                      </div>
+
+                      {/* Top-Right Action Chip */}
+                      <div
+                        style={{
+                          fontSize: isCompact ? 8 : 10,
+                          fontWeight: 900,
+                          color: "#ffffff",
+                          backgroundColor: "rgba(0, 0, 0, 0.4)",
+                          border: `1px solid ${theme.chipColor}`,
+                          padding: isCompact ? "2px 6px" : "3px 8px",
+                          borderRadius: isCompact ? 6 : 10,
+                          letterSpacing: isCompact ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: isCompact ? 3 : 4,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: isCompact ? 4 : 6,
+                            height: isCompact ? 4 : 6,
+                            borderRadius: "50%",
+                            backgroundColor: theme.chipColor,
+                            display: "inline-block",
+                          }}
+                        />
+                        {theme.chip}
+                      </div>
+                    </div>
+
+                    {/* 2. QR Code Frame */}
+                    <div
+                      style={{
+                        position: "relative",
+                        width: isCompact ? 112 : 172,
+                        height: isCompact ? 112 : 172,
+                        padding: isCompact ? 5 : 8,
+                        backgroundColor: "#ffffff",
+                        borderRadius: isCompact ? 12 : 18,
+                        boxShadow: "0 10px 26px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.08)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {/* Viewfinder Top-Left Bracket */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: isCompact ? -2.5 : -4,
+                          left: isCompact ? -2.5 : -4,
+                          width: isCompact ? 14 : 20,
+                          height: isCompact ? 14 : 20,
+                          borderTop: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderLeft: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderTopLeftRadius: isCompact ? 5 : 8,
+                        }}
+                      />
+                      {/* Viewfinder Top-Right Bracket */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: isCompact ? -2.5 : -4,
+                          right: isCompact ? -2.5 : -4,
+                          width: isCompact ? 14 : 20,
+                          height: isCompact ? 14 : 20,
+                          borderTop: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderRight: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderTopRightRadius: isCompact ? 5 : 8,
+                        }}
+                      />
+                      {/* Viewfinder Bottom-Left Bracket */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: isCompact ? -2.5 : -4,
+                          left: isCompact ? -2.5 : -4,
+                          width: isCompact ? 14 : 20,
+                          height: isCompact ? 14 : 20,
+                          borderBottom: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderLeft: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderBottomLeftRadius: isCompact ? 5 : 8,
+                        }}
+                      />
+                      {/* Viewfinder Bottom-Right Bracket */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: isCompact ? -2.5 : -4,
+                          right: isCompact ? -2.5 : -4,
+                          width: isCompact ? 14 : 20,
+                          height: isCompact ? 14 : 20,
+                          borderBottom: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderRight: `${isCompact ? 2.5 : 3.5}px solid ${theme.cornerColor}`,
+                          borderBottomRightRadius: isCompact ? 5 : 8,
+                        }}
+                      />
+
+                      {/* QR SVG Render / Fallback Image */}
+                      {qrSvgMap[qr.id] ? (
+                        <div
+                          className="tv-qr-container"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                          dangerouslySetInnerHTML={{ __html: qrSvgMap[qr.id] }}
+                        />
+                      ) : theme.fallbackImg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={theme.fallbackImg}
+                          alt={qr.label}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            borderRadius: isCompact ? 6 : 8,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            height: "100%",
+                            fontSize: isCompact ? 10 : 12,
+                            color: "#64748b",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Loading QR...
+                        </div>
+                      )}
+
+                      {/* Centered Brand Watermark Badge Inside QR Code */}
+                      {theme.centerLogo && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: `translate(-50%, -50%) scale(${isCompact ? 0.72 : 1})`,
+                            zIndex: 5,
+                            pointerEvents: "none",
+                          }}
+                        >
+                          {theme.centerLogo}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. Call-To-Action Button Pill */}
+                    <div
+                      style={{
+                        width: "100%",
+                        marginTop: isCompact ? 5 : 10,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: isCompact ? 1 : 3,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "100%",
+                          padding: isCompact ? "4px 8px" : "6px 12px",
+                          borderRadius: isCompact ? 9 : 14,
+                          background: theme.btnBg,
+                          boxShadow: theme.btnShadow,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: isCompact ? 4 : 6,
+                          color: "#ffffff",
+                        }}
+                      >
+                        <span style={{ fontSize: isCompact ? 10 : 13 }}>📷</span>
+                        <span
+                          style={{
+                            fontSize: isCompact ? 9.5 : 12,
+                            fontWeight: 900,
+                            letterSpacing: 0.6,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {theme.ctaText}
+                        </span>
+                      </div>
+                      {!isCompact && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#cbd5e1",
+                            fontWeight: 600,
+                            lineHeight: 1.1,
+                            textAlign: "center",
+                          }}
+                        >
+                          Open phone camera to scan instantly
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#cbd5e1",
-                      fontWeight: 600,
-                      lineHeight: 1.1,
-                      textAlign: "center",
-                    }}
-                  >
-                    Open phone camera to scan instantly
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ============================================================ */}

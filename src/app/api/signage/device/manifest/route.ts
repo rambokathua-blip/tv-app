@@ -27,7 +27,24 @@ export async function GET(request: Request) {
       .single();
 
     if (!error && data?.snapshot) {
-      return NextResponse.json(data.snapshot, {
+      const snap = { ...data.snapshot };
+      try {
+        const { data: dbQrs } = await admin
+          .from("signage_qr_codes")
+          .select("*")
+          .eq("enabled", true)
+          .order("position");
+        if (dbQrs && dbQrs.length > 0) {
+          snap.qr_codes = dbQrs.map((q: any) => ({
+            id: q.id,
+            label: q.label,
+            target_url: q.target_url,
+            caption: q.caption,
+          }));
+        }
+      } catch {}
+
+      return NextResponse.json(snap, {
         status: 200,
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",

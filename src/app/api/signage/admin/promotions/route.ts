@@ -210,6 +210,37 @@ export async function POST(request: Request) {
               ]
             : liveSlides;
 
+        // Fetch active QR codes from Supabase
+        const { data: dbQrs } = await admin
+          .from("signage_qr_codes")
+          .select("*")
+          .eq("enabled", true)
+          .order("position");
+
+        const activeQrs = (dbQrs && dbQrs.length > 0)
+          ? dbQrs.map((q: any) => ({
+              id: q.id,
+              label: q.label,
+              target_url: q.target_url,
+              caption: q.caption,
+            }))
+          : (devStore.qrCodes && devStore.qrCodes.length > 0)
+          ? devStore.qrCodes
+          : [
+              {
+                id: "qr-wa",
+                label: "WhatsApp Channel",
+                target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
+                caption: "Join for daily wholesale rates & deals",
+              },
+              {
+                id: "qr-ig",
+                label: "Instagram",
+                target_url: "https://www.instagram.com/kathua_fresh/",
+                caption: "Follow @kathua_fresh for daily offers",
+              },
+            ];
+
         const newSnapshot = {
           version: nextVer,
           published_at: new Date().toISOString(),
@@ -222,20 +253,7 @@ export async function POST(request: Request) {
             ticker_enabled: true,
             layout_profile: "standard",
           },
-          qr_codes: [
-            {
-              id: "qr-wa",
-              label: "WhatsApp Channel",
-              target_url: "https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B",
-              caption: "Join for daily wholesale rates & deals",
-            },
-            {
-              id: "qr-ig",
-              label: "Instagram",
-              target_url: "https://www.instagram.com/kathua_fresh/",
-              caption: "Follow @kathua_fresh for daily offers",
-            },
-          ],
+          qr_codes: activeQrs,
           slides: finalSlides,
           audio: {
             enabled: devStore.audioSettings?.enabled ?? true,
