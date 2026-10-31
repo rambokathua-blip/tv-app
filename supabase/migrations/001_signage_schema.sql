@@ -7,7 +7,7 @@
 -- TABLES
 -- ============================================================
 
-CREATE TABLE signage_devices (
+CREATE TABLE IF NOT EXISTS signage_devices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL DEFAULT 'Unnamed TV',
   status TEXT NOT NULL DEFAULT 'pending'
@@ -31,7 +31,7 @@ CREATE TABLE signage_devices (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_pairing_codes (
+CREATE TABLE IF NOT EXISTS signage_pairing_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL,
   device_id UUID REFERENCES signage_devices(id) ON DELETE CASCADE,
@@ -43,7 +43,7 @@ CREATE TABLE signage_pairing_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_media (
+CREATE TABLE IF NOT EXISTS signage_media (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   kind TEXT NOT NULL CHECK (kind IN ('image', 'audio', 'video')),
   storage_path TEXT NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE signage_media (
   deleted_at TIMESTAMPTZ
 );
 
-CREATE TABLE signage_promotions (
+CREATE TABLE IF NOT EXISTS signage_promotions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   price_text TEXT,
@@ -76,7 +76,7 @@ CREATE TABLE signage_promotions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_playlists (
+CREATE TABLE IF NOT EXISTS signage_playlists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL DEFAULT 'Default',
   is_default BOOLEAN NOT NULL DEFAULT false,
@@ -84,7 +84,7 @@ CREATE TABLE signage_playlists (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_playlist_items (
+CREATE TABLE IF NOT EXISTS signage_playlist_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   playlist_id UUID NOT NULL REFERENCES signage_playlists(id) ON DELETE CASCADE,
   promotion_id UUID NOT NULL REFERENCES signage_promotions(id) ON DELETE CASCADE,
@@ -94,7 +94,7 @@ CREATE TABLE signage_playlist_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_branding (
+CREATE TABLE IF NOT EXISTS signage_branding (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   logo_media_id UUID REFERENCES signage_media(id),
   website_text TEXT NOT NULL DEFAULT 'www.kathuafresh.in',
@@ -107,7 +107,7 @@ CREATE TABLE signage_branding (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_qr_codes (
+CREATE TABLE IF NOT EXISTS signage_qr_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   label TEXT NOT NULL,
   target_url TEXT NOT NULL,
@@ -118,7 +118,7 @@ CREATE TABLE signage_qr_codes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_announcements (
+CREATE TABLE IF NOT EXISTS signage_announcements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL CHECK (type IN ('welcome', 'offer', 'marketing')),
   title TEXT NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE signage_announcements (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_voice_settings (
+CREATE TABLE IF NOT EXISTS signage_voice_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   master_enabled BOOLEAN NOT NULL DEFAULT false,
   volume REAL NOT NULL DEFAULT 0.7 CHECK (volume >= 0 AND volume <= 1),
@@ -143,7 +143,7 @@ CREATE TABLE signage_voice_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_publish_versions (
+CREATE TABLE IF NOT EXISTS signage_publish_versions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   version_no INTEGER NOT NULL,
   snapshot JSONB NOT NULL,
@@ -152,7 +152,7 @@ CREATE TABLE signage_publish_versions (
   published_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_commands (
+CREATE TABLE IF NOT EXISTS signage_commands (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   device_id UUID NOT NULL REFERENCES signage_devices(id) ON DELETE CASCADE,
   command TEXT NOT NULL
@@ -162,7 +162,7 @@ CREATE TABLE signage_commands (
   delivered_at TIMESTAMPTZ
 );
 
-CREATE TABLE signage_device_events (
+CREATE TABLE IF NOT EXISTS signage_device_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   device_id UUID NOT NULL REFERENCES signage_devices(id) ON DELETE CASCADE,
   level TEXT NOT NULL DEFAULT 'info' CHECK (level IN ('info', 'warn', 'error')),
@@ -171,7 +171,7 @@ CREATE TABLE signage_device_events (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE signage_audit_log (
+CREATE TABLE IF NOT EXISTS signage_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id UUID,
   action TEXT NOT NULL,
@@ -185,30 +185,30 @@ CREATE TABLE signage_audit_log (
 -- INDEXES
 -- ============================================================
 
-CREATE INDEX idx_signage_promotions_status_dates
+CREATE INDEX IF NOT EXISTS idx_signage_promotions_status_dates
   ON signage_promotions (status, starts_at, ends_at);
 
-CREATE INDEX idx_signage_playlist_items_playlist_position
+CREATE INDEX IF NOT EXISTS idx_signage_playlist_items_playlist_position
   ON signage_playlist_items (playlist_id, position);
 
-CREATE UNIQUE INDEX idx_signage_devices_token_hash
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signage_devices_token_hash
   ON signage_devices (token_hash) WHERE token_hash IS NOT NULL;
 
-CREATE UNIQUE INDEX idx_signage_pairing_codes_active
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signage_pairing_codes_active
   ON signage_pairing_codes (code)
-  WHERE claimed_at IS NULL AND expires_at > now();
+  WHERE claimed_at IS NULL;
 
-CREATE INDEX idx_signage_commands_device_pending
+CREATE INDEX IF NOT EXISTS idx_signage_commands_device_pending
   ON signage_commands (device_id, created_at)
   WHERE delivered_at IS NULL;
 
-CREATE INDEX idx_signage_device_events_device_at
+CREATE INDEX IF NOT EXISTS idx_signage_device_events_device_at
   ON signage_device_events (device_id, at);
 
-CREATE INDEX idx_signage_publish_versions_version
+CREATE INDEX IF NOT EXISTS idx_signage_publish_versions_version
   ON signage_publish_versions (version_no DESC);
 
-CREATE INDEX idx_signage_audit_log_at
+CREATE INDEX IF NOT EXISTS idx_signage_audit_log_at
   ON signage_audit_log (at DESC);
 
 -- ============================================================
@@ -230,28 +230,78 @@ ALTER TABLE signage_commands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE signage_device_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE signage_audit_log ENABLE ROW LEVEL SECURITY;
 
+-- Allow open access for signage operations (backend API & display clients)
+DROP POLICY IF EXISTS "signage_promotions_policy" ON signage_promotions;
+CREATE POLICY "signage_promotions_policy" ON signage_promotions FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_publish_versions_policy" ON signage_publish_versions;
+CREATE POLICY "signage_publish_versions_policy" ON signage_publish_versions FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_media_policy" ON signage_media;
+CREATE POLICY "signage_media_policy" ON signage_media FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_playlists_policy" ON signage_playlists;
+CREATE POLICY "signage_playlists_policy" ON signage_playlists FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_playlist_items_policy" ON signage_playlist_items;
+CREATE POLICY "signage_playlist_items_policy" ON signage_playlist_items FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_branding_policy" ON signage_branding;
+CREATE POLICY "signage_branding_policy" ON signage_branding FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_qr_codes_policy" ON signage_qr_codes;
+CREATE POLICY "signage_qr_codes_policy" ON signage_qr_codes FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_voice_settings_policy" ON signage_voice_settings;
+CREATE POLICY "signage_voice_settings_policy" ON signage_voice_settings FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_announcements_policy" ON signage_announcements;
+CREATE POLICY "signage_announcements_policy" ON signage_announcements FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_devices_policy" ON signage_devices;
+CREATE POLICY "signage_devices_policy" ON signage_devices FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_pairing_codes_policy" ON signage_pairing_codes;
+CREATE POLICY "signage_pairing_codes_policy" ON signage_pairing_codes FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_commands_policy" ON signage_commands;
+CREATE POLICY "signage_commands_policy" ON signage_commands FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_device_events_policy" ON signage_device_events;
+CREATE POLICY "signage_device_events_policy" ON signage_device_events FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "signage_audit_log_policy" ON signage_audit_log;
+CREATE POLICY "signage_audit_log_policy" ON signage_audit_log FOR ALL USING (true) WITH CHECK (true);
+
 -- ============================================================
--- SEED DATA
+-- SEED DATA (Safe Idempotent Inserts)
 -- ============================================================
 
 -- Default playlist
-INSERT INTO signage_playlists (name, is_default) VALUES ('Default', true);
+INSERT INTO signage_playlists (name, is_default)
+SELECT 'Default', true
+WHERE NOT EXISTS (SELECT 1 FROM signage_playlists WHERE is_default = true);
 
 -- Default branding
 INSERT INTO signage_branding (website_text, tagline, ticker_text, ticker_enabled, layout_profile)
-VALUES (
+SELECT
   'www.kathuafresh.in',
-  'Fresh vegetables daily!',
-  'Visit www.kathuafresh.in for home delivery | Fresh vegetables at your doorstep',
+  'Quality Assured | Always Fresh',
+  'Welcome to Kathua Fresh • Quality Assured | Always Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Guaranteed',
   true,
   'standard'
-);
+WHERE NOT EXISTS (SELECT 1 FROM signage_branding);
 
 -- Default QR codes
-INSERT INTO signage_qr_codes (label, target_url, caption, position, enabled) VALUES
-  ('WhatsApp Channel', 'https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B', 'Join for daily wholesale rates & deals', 0, true),
-  ('Instagram', 'https://www.instagram.com/kathua_fresh/', 'Follow @kathua_fresh for daily offers', 1, true);
+INSERT INTO signage_qr_codes (label, target_url, caption, position, enabled)
+SELECT 'WhatsApp Channel', 'https://whatsapp.com/channel/0029Vb6WRPz2UPBI3hSeQE1B', 'Join for daily wholesale rates & deals', 0, true
+WHERE NOT EXISTS (SELECT 1 FROM signage_qr_codes WHERE label = 'WhatsApp Channel');
+
+INSERT INTO signage_qr_codes (label, target_url, caption, position, enabled)
+SELECT 'Instagram', 'https://www.instagram.com/kathua_fresh/', 'Follow @kathua_fresh for daily offers', 1, true
+WHERE NOT EXISTS (SELECT 1 FROM signage_qr_codes WHERE label = 'Instagram');
 
 -- Default voice settings
 INSERT INTO signage_voice_settings (master_enabled, volume, min_gap_sec, welcome_on_start)
-VALUES (false, 0.7, 180, true);
+SELECT false, 0.7, 180, true
+WHERE NOT EXISTS (SELECT 1 FROM signage_voice_settings);
