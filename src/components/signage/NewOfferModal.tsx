@@ -346,6 +346,22 @@ export default function NewOfferModal({
 
       const promoData = await promoRes.json();
       const promotionId = promoData.promotion?.id || promoData.id || promoData.data?.id;
+      const realPromo = promoData.promotion || promoData.data || promoData;
+
+      // Clean up temporary ID and save real server promotion in local cache
+      try {
+        const cached = localStorage.getItem("kathua_signage_promotions");
+        const list = cached ? JSON.parse(cached) : [];
+        const cleaned = Array.isArray(list)
+          ? list.filter((p: any) => p.id !== tempId && p.id !== promotionId)
+          : [];
+        if (realPromo && realPromo.id) {
+          localStorage.setItem(
+            "kathua_signage_promotions",
+            JSON.stringify([realPromo, ...cleaned])
+          );
+        }
+      } catch {}
 
       if (promotionId) {
         // Add to default playlist

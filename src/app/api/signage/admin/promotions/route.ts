@@ -90,6 +90,28 @@ export async function POST(request: Request) {
   // Always persist promotion to Supabase cloud database for instant cross-device synchronization
   try {
     const admin = createAdminClient();
+
+    // Duplicate Guard: prevent creating multiple rows if submitted repeatedly
+    try {
+      const { data: existingRecent } = await admin
+        .from("signage_promotions")
+        .select("*, media:signage_media(*)")
+        .eq("title", parsed.data.title.trim())
+        .neq("status", "archived")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingRecent) {
+        const isSamePrice = (existingRecent.price_text || "").trim() === (parsed.data.price_text || "").trim();
+        const ageMs = Date.now() - new Date(existingRecent.created_at).getTime();
+        if (isSamePrice && ageMs < 20000) {
+          existingRecent.mrp = parsed.data.mrp || existingRecent.mrp;
+          return successResponse({ promotion: existingRecent, ...existingRecent }, 200);
+        }
+      }
+    } catch {}
+
     let mediaUuid: string | null = null;
     const customImg = parsed.data.media_id;
 
