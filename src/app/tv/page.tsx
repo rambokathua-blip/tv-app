@@ -465,6 +465,7 @@ export default function TvPlayerPage() {
               promotion_id: p.id,
               title: p.title || "Offer",
               price_text: p.price_text,
+              mrp: p.mrp || null,
               duration_sec: p.duration_sec || 10,
               image_url:
                 (p.media_id && (p.media_id.startsWith("/") || p.media_id.startsWith("http") || p.media_id.startsWith("data:"))
@@ -540,6 +541,7 @@ export default function TvPlayerPage() {
               promotion_id: p.id,
               title: p.title || "Offer",
               price_text: p.price_text,
+              mrp: p.mrp || null,
               duration_sec: p.duration_sec || 8,
               image_url:
                 (p.media_id && (p.media_id.startsWith("/") || p.media_id.startsWith("http") || p.media_id.startsWith("data:"))

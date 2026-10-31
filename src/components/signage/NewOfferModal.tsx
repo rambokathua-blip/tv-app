@@ -175,21 +175,25 @@ export default function NewOfferModal({
     {
       title: "Desi Tamatar",
       price: "₹25 / kg",
+      mrp: "₹35 / kg",
       url: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1280&auto=format&fit=crop",
     },
     {
       title: "Nashik Onion",
       price: "₹38 / kg",
+      mrp: "₹50 / kg",
       url: "https://images.unsplash.com/photo-1508747703725-719777637510?q=80&w=1280&auto=format&fit=crop",
     },
     {
       title: "Royal Apple",
       price: "₹120 / kg",
+      mrp: "₹160 / kg",
       url: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?q=80&w=1280&auto=format&fit=crop",
     },
     {
       title: "Fresh Cauliflower",
       price: "₹30 / pc",
+      mrp: "₹45 / pc",
       url: "https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?q=80&w=1280&auto=format&fit=crop",
     },
   ];
@@ -198,6 +202,7 @@ export default function NewOfferModal({
     setImageUrl(sample.url);
     setTitle(sample.title);
     setPriceText(sample.price);
+    setMrp(sample.mrp ? sample.mrp.replace(/^₹\s*/, "") : "");
   };
 
   const handleOpenSource = (isCamera: boolean) => {
@@ -664,8 +669,15 @@ export default function NewOfferModal({
                             <div className="text-xs font-bold text-white truncate">
                               {s.title}
                             </div>
-                            <div className="text-[11px] font-black text-amber-400">
-                              {s.price}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {s.mrp && (
+                                <span className="text-[10px] line-through text-red-400 font-bold">
+                                  {s.mrp}
+                                </span>
+                              )}
+                              <span className="text-[11px] font-black text-amber-400">
+                                {s.price}
+                              </span>
                             </div>
                           </div>
                         </button>
