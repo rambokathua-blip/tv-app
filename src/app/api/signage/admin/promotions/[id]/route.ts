@@ -6,6 +6,8 @@ import {
   errorResponse,
   parseBody,
   auditLog,
+  packPromotionNotes,
+  unpackPromotionNotes,
 } from "@/lib/signage/api-utils";
 import { devStore } from "@/lib/signage/dev-store";
 import { updatePromotionSchema } from "@/lib/signage/schemas";
@@ -31,9 +33,11 @@ export async function GET(
 
     if (!error && data) {
       devStore.load();
+      const meta = unpackPromotionNotes(data.notes);
       let img =
         data.media?.storage_path ||
         data.media?.thumb_path ||
+        meta.img ||
         (data.notes?.startsWith("IMG:") ? data.notes.slice(4) : null) ||
         (data.media_id && (data.media_id.startsWith("data:") || data.media_id.startsWith("http") || data.media_id.startsWith("/")) ? data.media_id : null);
 
@@ -50,6 +54,7 @@ export async function GET(
           thumb_path: img,
         };
       }
+      data.mrp = data.mrp || meta.mrp || null;
       return successResponse(data);
     }
   } catch {
@@ -106,13 +111,16 @@ export async function PATCH(
       }
     }
 
+    const packedNotes = packPromotionNotes(parsed.data.mrp, customImg, parsed.data.notes);
+
+    const { mrp: _ignoredMrp, ...safeUpdateData } = parsed.data;
     const updatePayload: Record<string, any> = {
-      ...parsed.data,
+      ...safeUpdateData,
+      notes: packedNotes,
       updated_at: new Date().toISOString(),
     };
     if (customImg) {
       updatePayload.media_id = mediaUuid;
-      updatePayload.notes = `IMG:${customImg}`;
     }
 
     let { data, error } = await admin
@@ -122,19 +130,8 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error && error.message?.includes("mrp")) {
-      delete updatePayload.mrp;
-      const retry = await admin
-        .from("signage_promotions")
-        .update(updatePayload)
-        .eq("id", id)
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
     if (!error && data) {
+      data.mrp = parsed.data.mrp || data.mrp;
       await auditLog(auth.claims.sub, "promotion.update", "promotion", id);
       devStore.updatePromotion(id, parsed.data);
       data.media_id = customImg || mediaUuid || data.media_id;

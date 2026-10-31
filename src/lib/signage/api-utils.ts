@@ -224,3 +224,74 @@ export async function hashToken(token: string): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/**
+ * Safely encode optional MRP and custom image URL/data URI into the 'notes' column.
+ * This guarantees 100% persistence even if the remote Postgres table does not have an 'mrp' column.
+ */
+export function packPromotionNotes(
+  mrp?: string | null,
+  customImg?: string | null,
+  originalNotes?: string | null
+): string | null {
+  const meta: Record<string, any> = {};
+
+  if (mrp && typeof mrp === "string" && mrp.trim()) {
+    const trimmed = mrp.trim();
+    meta.mrp = trimmed.startsWith("₹") ? trimmed : `₹${trimmed}`;
+  }
+
+  if (customImg && typeof customImg === "string" && customImg.trim()) {
+    meta.img = customImg.trim();
+  }
+
+  if (originalNotes && typeof originalNotes === "string" && originalNotes.trim()) {
+    const raw = originalNotes.trim();
+    if (!raw.startsWith("META:") && !raw.startsWith("IMG:")) {
+      meta.notes = raw;
+    }
+  }
+
+  if (Object.keys(meta).length === 0) return null;
+  return `META:${JSON.stringify(meta)}`;
+}
+
+/**
+ * Extract MRP, custom image, and user notes from the 'notes' column.
+ */
+export function unpackPromotionNotes(notes?: string | null): {
+  mrp: string | null;
+  img: string | null;
+  notes: string | null;
+} {
+  if (!notes || typeof notes !== "string") {
+    return { mrp: null, img: null, notes: null };
+  }
+
+  if (notes.startsWith("META:")) {
+    try {
+      const parsed = JSON.parse(notes.slice(5));
+      return {
+        mrp: parsed.mrp || null,
+        img: parsed.img || null,
+        notes: parsed.notes || null,
+      };
+    } catch {}
+  }
+
+  // Backwards compatibility with legacy "IMG:..." and "MRP:..." notes format
+  let img: string | null = null;
+  let mrp: string | null = null;
+
+  if (notes.startsWith("IMG:")) {
+    img = notes.slice(4);
+  }
+
+  const mrpMatch = notes.match(/mrp[:\s]*([0-9₹\s\w/]+)/i);
+  if (mrpMatch) {
+    const val = mrpMatch[1].trim();
+    mrp = val.startsWith("₹") ? val : `₹${val}`;
+  }
+
+  return { mrp, img, notes: null };
+}

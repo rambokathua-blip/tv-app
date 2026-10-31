@@ -98,69 +98,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun getRequiredPermissions(isCamera: Boolean): Array<String> {
-        val permissions = mutableListOf<String>()
-        if (isCamera) {
-            permissions.add(android.Manifest.permission.CAMERA)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+
-            permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
-            permissions.add(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13
-            permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
-        } else {
-            // Android 12 and below
-            permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-        }
-        return permissions.distinct().toTypedArray()
+        if (!isCamera) return emptyArray()
+        return arrayOf(android.Manifest.permission.CAMERA)
     }
 
     private fun hasRequiredPermissions(isCamera: Boolean): Boolean {
-        if (isCamera) {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                return false
-            }
+        if (!isCamera) {
+            // Picking photos from system gallery/file picker requires NO runtime permissions
+            return true
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+: Full access or partial user-selected photo access
-            val hasImages = ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
-            val hasVisual = ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
-            if (!hasImages && !hasVisual) return false
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                return false
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                return false
-            }
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                    return false
-                }
-            }
-        }
-        return true
+        return ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestPermissionsForAction(isCamera: Boolean) {
-        val required = getRequiredPermissions(isCamera)
-        val missing = required.filter { perm ->
-            ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED
+        if (!isCamera) {
+            launchGalleryDirectly()
+            return
         }
-
-        if (missing.isEmpty()) {
-            launchChooser(isCamera)
+        if (hasRequiredPermissions(true)) {
+            launchCameraDirectly()
             return
         }
 
-        pendingActionIsCapture = isCamera
-        ActivityCompat.requestPermissions(this, missing.toTypedArray(), PERMISSION_REQUEST_CODE)
+        pendingActionIsCapture = true
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.CAMERA),
+            PERMISSION_REQUEST_CODE
+        )
     }
 
     private fun openAppSettings() {
@@ -170,17 +135,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            Toast.makeText(this, "Please enable Camera and Photos permissions here", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Please enable Camera permission here", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Unable to open application settings", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showPermissionDeniedDialog(isCamera: Boolean) {
-        val feature = if (isCamera) "Camera & Photos" else "Photos & Gallery"
         AlertDialog.Builder(this)
-            .setTitle("Permission Required")
-            .setMessage("Kathua Fresh needs $feature permission to upload offer photos to TV screens.\n\nPlease enable permissions in App Settings.")
+            .setTitle("Camera Permission Needed")
+            .setMessage("Kathua Fresh needs Camera permission to take photos of products.\n\nPlease enable Camera in App Settings.")
             .setPositiveButton("Open Settings") { _, _ ->
                 openAppSettings()
             }
@@ -191,13 +155,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun checkAppPermissions() {
-        val required = getRequiredPermissions(true)
-        val missing = required.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, missing.toTypedArray(), PERMISSION_REQUEST_CODE)
-        }
+        // Permissions are requested on demand when the user taps Take Photo
     }
 
     private fun hideSystemUI() {
@@ -290,20 +248,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val isCapture = fileChooserParams?.isCaptureEnabled == true ||
                     (fileChooserParams?.acceptTypes?.any { it.contains("camera", ignoreCase = true) } == true)
 
-                if (hasRequiredPermissions(isCapture)) {
-                    launchChooser(isCapture)
+                if (isCapture) {
+                    if (hasRequiredPermissions(true)) {
+                        launchCameraDirectly()
+                    } else {
+                        requestPermissionsForAction(true)
+                    }
                 } else {
-                    requestPermissionsForAction(isCapture)
+                    // System gallery/document picker requires no permissions
+                    launchGalleryDirectly()
                 }
                 return true
             }
         }
     }
 
-    private fun launchChooser(isCameraOnly: Boolean) {
+    private fun launchCameraDirectly() {
         try {
-            val chooserIntent = buildChooserIntent(isCameraOnly)
-            startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+            val cameraIntent = createCameraIntent()
+            startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST_CODE)
+        } catch (e: Exception) {
+            fileUploadCallback?.onReceiveValue(null)
+            fileUploadCallback = null
+            pendingActionIsCapture = null
+            Toast.makeText(this, "Could not open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun launchGalleryDirectly() {
+        try {
+            val galleryIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+            }
+            val pickIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                type = "image/*"
+            }
+            val chooser = Intent(Intent.ACTION_CHOOSER).apply {
+                putExtra(Intent.EXTRA_INTENT, galleryIntent)
+                putExtra(Intent.EXTRA_TITLE, "Select Offer Photo from Gallery")
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(pickIntent))
+            }
+            startActivityForResult(chooser, FILE_CHOOSER_REQUEST_CODE)
         } catch (e: Exception) {
             try {
                 val simplePicker = Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -315,33 +301,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 fileUploadCallback?.onReceiveValue(null)
                 fileUploadCallback = null
                 pendingActionIsCapture = null
-                Toast.makeText(this, "No image picker application found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No photo picker application found", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun buildChooserIntent(isCameraOnly: Boolean): Intent {
-        val cameraIntent = createCameraIntent()
+    private fun launchChooser(isCameraOnly: Boolean) {
         if (isCameraOnly) {
-            return cameraIntent
+            launchCameraDirectly()
+        } else {
+            launchGalleryDirectly()
         }
-        val galleryIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-        }
-        val pickIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
-            type = "image/*"
-        }
-        val extraIntents = mutableListOf<Intent>()
-        extraIntents.add(cameraIntent)
-        extraIntents.add(pickIntent)
-
-        val chooser = Intent(Intent.ACTION_CHOOSER).apply {
-            putExtra(Intent.EXTRA_INTENT, galleryIntent)
-            putExtra(Intent.EXTRA_TITLE, "Select Offer Photo / Camera")
-            putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toTypedArray())
-        }
-        return chooser
     }
 
     private fun createCameraImageFile(): File {
@@ -381,12 +351,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val granted = hasRequiredPermissions(isCamera)
 
             if (granted) {
-                Toast.makeText(this, "Permission granted! Opening...", Toast.LENGTH_SHORT).show()
-                if (fileUploadCallback != null) {
-                    launchChooser(isCamera)
-                }
+                Toast.makeText(this, "Camera permission granted! Opening...", Toast.LENGTH_SHORT).show()
+                launchCameraDirectly()
             } else {
-                Toast.makeText(this, "Permission denied for photo access", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Camera permission is needed to take product photos", Toast.LENGTH_SHORT).show()
                 fileUploadCallback?.onReceiveValue(null)
                 fileUploadCallback = null
                 pendingActionIsCapture = null
@@ -545,27 +513,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         @JavascriptInterface
         fun openImagePicker() {
             runOnUiThread {
-                if (!hasRequiredPermissions(false)) {
-                    requestPermissionsForAction(false)
-                } else {
-                    webView.evaluateJavascript(
-                        "(function() { var el = document.getElementById('new-offer-gallery-input') || document.getElementById('edit-offer-file-input') || document.querySelector('input[type=file]:not([capture])'); if(el) el.click(); })();",
-                        null
-                    )
-                }
+                launchGalleryDirectly()
             }
         }
 
         @JavascriptInterface
         fun openCamera() {
             runOnUiThread {
-                if (!hasRequiredPermissions(true)) {
-                    requestPermissionsForAction(true)
+                if (hasRequiredPermissions(true)) {
+                    launchCameraDirectly()
                 } else {
-                    webView.evaluateJavascript(
-                        "(function() { var el = document.getElementById('new-offer-camera-input') || document.getElementById('edit-offer-camera-input') || document.querySelector('input[capture]'); if(el) el.click(); })();",
-                        null
-                    )
+                    requestPermissionsForAction(true)
                 }
             }
         }

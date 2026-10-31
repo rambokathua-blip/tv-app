@@ -5,6 +5,8 @@ import {
   errorResponse,
   parseBody,
   auditLog,
+  packPromotionNotes,
+  unpackPromotionNotes,
 } from "@/lib/signage/api-utils";
 import {
   createPromotionSchema,
@@ -39,9 +41,11 @@ export async function GET(request: Request) {
       if (!error && data) {
         devStore.load();
         const enriched = data.map((promo: any) => {
+          const meta = unpackPromotionNotes(promo.notes);
           let img =
             promo.media?.storage_path ||
             promo.media?.thumb_path ||
+            meta.img ||
             (promo.notes?.startsWith("IMG:") ? promo.notes.slice(4) : null) ||
             (promo.media_id && (promo.media_id.startsWith("data:") || promo.media_id.startsWith("http") || promo.media_id.startsWith("/")) ? promo.media_id : null);
 
@@ -58,6 +62,8 @@ export async function GET(request: Request) {
               thumb_path: img,
             };
           }
+
+          promo.mrp = promo.mrp || meta.mrp || null;
           return promo;
         });
         return successResponse({ promotions: enriched, data: enriched });
@@ -115,10 +121,13 @@ export async function POST(request: Request) {
       }
     }
 
+    const packedNotes = packPromotionNotes(parsed.data.mrp, customImg, parsed.data.notes);
+
+    const { mrp: _ignoredMrp, ...safeInsertData } = parsed.data;
     const dbPayload = {
-      ...parsed.data,
+      ...safeInsertData,
       media_id: mediaUuid,
-      notes: customImg ? `IMG:${customImg}` : parsed.data.notes,
+      notes: packedNotes,
       created_by: auth.claims.sub,
     };
 
@@ -128,18 +137,8 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error && error.message?.includes("mrp")) {
-      const { mrp, ...fallbackPayload } = dbPayload;
-      const retry = await admin
-        .from("signage_promotions")
-        .insert(fallbackPayload)
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
     if (!error && data) {
+      data.mrp = parsed.data.mrp || null;
       await auditLog(auth.claims.sub, "promotion.create", "promotion", data.id);
 
       // Add to default playlist in Supabase
@@ -178,9 +177,11 @@ export async function POST(request: Request) {
         const nextVer = (lastVer?.version_no || 0) + 1;
 
         const liveSlides = (allActive || []).map((p: any) => {
+          const meta = unpackPromotionNotes(p.notes);
           const img =
             p.media?.storage_path ||
             p.media?.thumb_path ||
+            meta.img ||
             (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
             p.media_id ||
             "/kathua-fresh-logo.jpg";
@@ -189,7 +190,7 @@ export async function POST(request: Request) {
             promotion_id: p.id,
             title: p.title || "Offer",
             price_text: p.price_text,
-            mrp: p.mrp || null,
+            mrp: (p.id === data.id ? parsed.data.mrp : null) || p.mrp || meta.mrp || null,
             duration_sec: p.duration_sec || 8,
             image_url: img,
           };

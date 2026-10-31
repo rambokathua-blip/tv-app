@@ -199,6 +199,8 @@ export default function NewOfferModal({
   ];
 
   const handleSelectSample = (sample: (typeof sampleImages)[0]) => {
+    setImageFile(null);
+    setRawFile(null);
     setImageUrl(sample.url);
     setTitle(sample.title);
     setPriceText(sample.price);
@@ -323,12 +325,22 @@ export default function NewOfferModal({
       });
 
       if (!promoRes.ok) {
-        const errData = await promoRes.json().catch(() => ({}));
-        const errMessage =
-          errData.error?.message ||
-          errData.message ||
-          (typeof errData.error === "string" ? errData.error : null) ||
-          "Failed to create promotion";
+        const errText = await promoRes.text().catch(() => "");
+        let errMessage = "Failed to create promotion";
+        try {
+          const errData = JSON.parse(errText);
+          errMessage =
+            errData.error?.message ||
+            errData.message ||
+            (typeof errData.error === "string" ? errData.error : null) ||
+            errMessage;
+        } catch {
+          if (promoRes.status === 413) {
+            errMessage = "Image is too large. Please select a smaller photo or choose from samples.";
+          } else if (errText && errText.length < 150) {
+            errMessage = errText;
+          }
+        }
         throw new Error(errMessage);
       }
 
@@ -565,32 +577,29 @@ export default function NewOfferModal({
 
                   {/* Change Picture Buttons */}
                   <div className="grid grid-cols-2 gap-2 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSource(false)}
+                    <label
+                      htmlFor="new-offer-gallery-input"
                       className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                     >
                       <Upload className="w-4 h-4 shrink-0" />
                       <span>Change Picture</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSource(true)}
+                    </label>
+                    <label
+                      htmlFor="new-offer-camera-input"
                       className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                     >
                       <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Take New Photo</span>
-                    </button>
+                    </label>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Direct Native Touch Targets */}
                   <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSource(true)}
-                      className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border-2 border-emerald-500/40 hover:border-emerald-400 active:scale-95 flex flex-col items-center justify-center text-center cursor-pointer transition-all shadow-lg"
+                    <label
+                      htmlFor="new-offer-camera-input"
+                      className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border-2 border-emerald-500/40 hover:border-emerald-400 active:scale-95 flex flex-col items-center justify-center text-center cursor-pointer transition-all shadow-lg select-none"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center mb-2 shadow-md">
                         <Camera className="w-6 h-6" />
@@ -601,12 +610,11 @@ export default function NewOfferModal({
                       <div className="text-[10px] text-emerald-300 font-semibold mt-0.5">
                         Open Phone Camera
                       </div>
-                    </button>
+                    </label>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSource(false)}
-                      className="p-5 rounded-2xl bg-slate-950 border-2 border-slate-800 hover:border-slate-700 active:scale-95 flex flex-col items-center justify-center text-center cursor-pointer transition-all shadow-lg"
+                    <label
+                      htmlFor="new-offer-gallery-input"
+                      className="p-5 rounded-2xl bg-slate-950 border-2 border-slate-800 hover:border-slate-700 active:scale-95 flex flex-col items-center justify-center text-center cursor-pointer transition-all shadow-lg select-none"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-slate-800 text-emerald-400 flex items-center justify-center mb-2">
                         <ImageIcon className="w-6 h-6" />
@@ -617,7 +625,7 @@ export default function NewOfferModal({
                       <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
                         Select from Files / Album
                       </div>
-                    </button>
+                    </label>
                   </div>
 
                   {/* Android Permission Shortcut Banner */}
