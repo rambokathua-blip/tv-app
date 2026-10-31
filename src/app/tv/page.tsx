@@ -1841,14 +1841,15 @@ export default function TvPlayerPage() {
           boxShadow: "0 -10px 30px rgba(0,0,0,0.6)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
-            <span style={{ fontSize: 24, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 32 }}>
+          {/* Left: Branding & Website */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexShrink: 0, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 20, color: "#86efac", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Order Online / Visit:
             </span>
             <span
               style={{
-                fontSize: 64,
+                fontSize: 48,
                 fontWeight: 900,
                 color: "#ffffff",
                 letterSpacing: "0.02em",
@@ -1859,111 +1860,134 @@ export default function TvPlayerPage() {
             </span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {/* TV Audio Mute / Unmute Toggle Button */}
-            <button
-              onClick={() => toggleTvAudio()}
+          {/* Right: Audio Capsule & Store Status */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+            {/* Unified Sleek Audio Capsule (No Overlap) */}
+            <div
               style={{
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: 12,
-                padding: "10px 24px",
-                borderRadius: 30,
-                backgroundColor: !isAudioMuted && isAudioPlaying
-                  ? "rgba(16, 185, 129, 0.25)"
-                  : "rgba(239, 68, 68, 0.2)",
-                border: `2px solid ${!isAudioMuted && isAudioPlaying ? "#10b981" : "#f87171"}`,
-                color: !isAudioMuted && isAudioPlaying ? "#34d399" : "#fca5a5",
-                fontSize: 18,
-                fontWeight: 800,
-                cursor: "pointer",
-                boxShadow: !isAudioMuted && isAudioPlaying
-                  ? "0 0 20px rgba(16, 185, 129, 0.4)"
-                  : "none",
-                outline: "none",
+                borderRadius: 28,
+                backgroundColor: !isAudioMuted
+                  ? "rgba(6, 78, 59, 0.75)"
+                  : "rgba(239, 68, 68, 0.16)",
+                border: `1.5px solid ${!isAudioMuted ? "#10b981" : "#f87171"}`,
+                boxShadow: !isAudioMuted ? "0 0 16px rgba(16, 185, 129, 0.25)" : "none",
+                backdropFilter: "blur(12px)",
+                overflow: "hidden",
                 transition: "all 0.2s ease",
               }}
             >
-              {!isAudioMuted && isAudioPlaying ? (
-                <>
-                  <span style={{ fontSize: 22 }}>🔊</span>
-                  <span>AUDIO ON</span>
-                  <span style={{ display: "inline-flex", gap: 3, alignItems: "flex-end", height: 16, marginLeft: 2 }}>
-                    <span style={{ width: 3, height: "100%", backgroundColor: "#34d399", borderRadius: 2 }} />
-                    <span style={{ width: 3, height: "60%", backgroundColor: "#34d399", borderRadius: 2 }} />
-                    <span style={{ width: 3, height: "85%", backgroundColor: "#34d399", borderRadius: 2 }} />
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span style={{ fontSize: 22 }}>🔇</span>
-                  <span>AUDIO MUTED (Click to Play)</span>
-                </>
-              )}
-            </button>
-
-            {/* Audio Interval Selector Pill */}
-            {!isAudioMuted && (
-              <div
+              {/* Audio Toggle (Mute / Unmute) */}
+              <button
+                onClick={() => toggleTvAudio()}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
-                  padding: "8px 18px",
-                  borderRadius: 30,
-                  backgroundColor: "rgba(15, 23, 42, 0.85)",
-                  border: "1.5px solid rgba(34, 197, 94, 0.4)",
-                  color: "#86efac",
-                  fontSize: 16,
+                  gap: 8,
+                  padding: "8px 16px",
+                  backgroundColor: "transparent",
+                  border: "none",
+                  color: !isAudioMuted ? "#34d399" : "#fca5a5",
+                  fontSize: 15,
                   fontWeight: 800,
-                  backdropFilter: "blur(8px)",
+                  cursor: "pointer",
+                  outline: "none",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.15s ease",
                 }}
               >
-                <span>⏱️</span>
-                <span>
-                  {audioIntervalSec === 0
-                    ? "Loop: Continuous"
-                    : audioIntervalCountdown !== null
-                    ? `Next Sound: in ${audioIntervalCountdown}s`
-                    : `Sound Gap: ${audioIntervalSec >= 60 ? audioIntervalSec / 60 + " min" : audioIntervalSec + " sec"}`}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const intervals = [0, 30, 60, 120, 180, 300];
-                    const next = (intervals.indexOf(audioIntervalSec) + 1) % intervals.length;
-                    changeAudioInterval(intervals[next]);
-                  }}
-                  title="Click to cycle sound interval"
-                  style={{
-                    backgroundColor: "rgba(34, 197, 94, 0.25)",
-                    border: "1px solid #22c55e",
-                    color: "#ffffff",
-                    borderRadius: 16,
-                    padding: "3px 10px",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Adjust ▾
-                </button>
-              </div>
-            )}
+                {!isAudioMuted ? (
+                  <>
+                    <span style={{ fontSize: 18 }}>🔊</span>
+                    <span>AUDIO ON</span>
+                    <span style={{ display: "inline-flex", gap: 2.5, alignItems: "flex-end", height: 13, marginLeft: 2 }}>
+                      <span style={{ width: 2.5, height: "100%", backgroundColor: "#34d399", borderRadius: 2 }} />
+                      <span style={{ width: 2.5, height: "60%", backgroundColor: "#34d399", borderRadius: 2 }} />
+                      <span style={{ width: 2.5, height: "85%", backgroundColor: "#34d399", borderRadius: 2 }} />
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 18 }}>🔇</span>
+                    <span>AUDIO MUTED</span>
+                  </>
+                )}
+              </button>
 
+              {/* Sound Gap Selector (when unmuted) */}
+              {!isAudioMuted && (
+                <>
+                  <div style={{ width: 1, height: 22, backgroundColor: "rgba(16, 185, 129, 0.35)" }} />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const intervals = [0, 30, 60, 120, 180, 300];
+                      const next = (intervals.indexOf(audioIntervalSec) + 1) % intervals.length;
+                      changeAudioInterval(intervals[next]);
+                    }}
+                    title="Click to cycle sound gap"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "8px 14px",
+                      backgroundColor: "rgba(0, 0, 0, 0.25)",
+                      border: "none",
+                      color: "#86efac",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      outline: "none",
+                      whiteSpace: "nowrap",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span>⏱️</span>
+                    <span>
+                      {audioIntervalSec === 0
+                        ? "Continuous"
+                        : audioIntervalCountdown !== null
+                        ? `In ${audioIntervalCountdown}s`
+                        : `Gap: ${audioIntervalSec >= 60 ? audioIntervalSec / 60 + "m" : audioIntervalSec + "s"}`}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        padding: "2px 6px",
+                        borderRadius: 8,
+                        backgroundColor: "rgba(34, 197, 94, 0.3)",
+                        border: "1px solid rgba(34, 197, 94, 0.5)",
+                        color: "#ffffff",
+                        fontWeight: 800,
+                        marginLeft: 2,
+                      }}
+                    >
+                      ADJUST ▾
+                    </span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Store Status Pill */}
             <div
               style={{
-                padding: "8px 20px",
-                borderRadius: 30,
-                backgroundColor: "rgba(34, 197, 94, 0.2)",
+                padding: "8px 18px",
+                borderRadius: 28,
+                backgroundColor: "rgba(34, 197, 94, 0.18)",
                 border: "1px solid #22c55e",
                 color: "#4ade80",
-                fontSize: 18,
+                fontSize: 15,
                 fontWeight: 700,
+                whiteSpace: "nowrap",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
               }}
             >
-              STORE OPEN • FRESH STOCK ARRIVED
+              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#4ade80", display: "inline-block", boxShadow: "0 0 8px #4ade80" }} />
+              <span>STORE OPEN • FRESH STOCK ARRIVED</span>
             </div>
           </div>
         </div>
