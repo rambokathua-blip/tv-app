@@ -44,6 +44,8 @@ export default function VoiceAnnouncementsPage() {
   const [audioBgEnabled, setAudioBgEnabled] = useState(true);
   const [audioBgVolume, setAudioBgVolume] = useState(80);
   const [audioBgInterval, setAudioBgInterval] = useState<number>(120);
+  const [customAdminIntervalVal, setCustomAdminIntervalVal] = useState<number>(2);
+  const [customAdminIntervalUnit, setCustomAdminIntervalUnit] = useState<"sec" | "min">("min");
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const phoneAudioRef = useRef<HTMLAudioElement | null>(null);
   const speechAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -795,6 +797,45 @@ export default function VoiceAnnouncementsPage() {
                   {item.label}
                 </button>
               ))}
+            </div>
+
+            {/* Custom Interval Option in Admin Studio */}
+            <div className="pt-2.5 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+                <span>⏱️</span>
+                <span>Custom Duration:</span>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="number"
+                  min="1"
+                  max="7200"
+                  placeholder="e.g. 45"
+                  value={customAdminIntervalVal || ""}
+                  onChange={(e) => setCustomAdminIntervalVal(Math.max(1, parseInt(e.target.value) || 0))}
+                  className="bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-1.5 text-xs text-white w-24 font-bold outline-none"
+                />
+                <select
+                  value={customAdminIntervalUnit}
+                  onChange={(e) => setCustomAdminIntervalUnit(e.target.value as "sec" | "min")}
+                  className="bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-2 py-1.5 text-xs text-slate-200 font-semibold outline-none cursor-pointer"
+                >
+                  <option value="sec">Seconds</option>
+                  <option value="min">Minutes</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const total = customAdminIntervalUnit === "min" ? customAdminIntervalVal * 60 : customAdminIntervalVal;
+                    if (total > 0) {
+                      handleUpdateBgInterval(total);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl transition-all shadow-sm whitespace-nowrap"
+                >
+                  Set Custom
+                </button>
+              </div>
             </div>
           </div>
         </div>

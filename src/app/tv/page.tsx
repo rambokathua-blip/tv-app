@@ -114,6 +114,9 @@ export default function TvPlayerPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showCustomIntervalModal, setShowCustomIntervalModal] = useState(false);
+  const [customIntervalValue, setCustomIntervalValue] = useState<number>(2);
+  const [customIntervalUnit, setCustomIntervalUnit] = useState<"sec" | "min">("min");
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -1922,11 +1925,9 @@ export default function TvPlayerPage() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const intervals = [0, 30, 60, 120, 180, 300];
-                      const next = (intervals.indexOf(audioIntervalSec) + 1) % intervals.length;
-                      changeAudioInterval(intervals[next]);
+                      setShowCustomIntervalModal(true);
                     }}
-                    title="Click to cycle sound gap"
+                    title="Click to set custom sound gap"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1963,7 +1964,7 @@ export default function TvPlayerPage() {
                         marginLeft: 2,
                       }}
                     >
-                      ADJUST ▾
+                      CUSTOM ▾
                     </span>
                   </button>
                 </>
@@ -2653,6 +2654,32 @@ export default function TvPlayerPage() {
                       </button>
                     );
                   })}
+                  <button
+                    onClick={() => {
+                      setShowQuickMenu(false);
+                      setShowCustomIntervalModal(true);
+                    }}
+                    style={{
+                      gridColumn: "span 3",
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: "rgba(34, 197, 94, 0.15)",
+                      border: "1px dashed #22c55e",
+                      color: "#86efac",
+                      cursor: "pointer",
+                      textAlign: "center",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      marginTop: 4,
+                    }}
+                  >
+                    <span>⏱️</span>
+                    <span>Set Custom Duration (Apni Marzi Ka Time)...</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -2861,6 +2888,189 @@ export default function TvPlayerPage() {
               >
                 Close & Return to TV
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* CUSTOM AUDIO INTERVAL POPUP MODAL                            */}
+      {/* ============================================================ */}
+      {showCustomIntervalModal && (
+        <div
+          onClick={() => setShowCustomIntervalModal(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.85)",
+            backdropFilter: "blur(16px)",
+            zIndex: 10006,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            fontFamily: "system-ui, -apple-system, sans-serif",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: "#06281e",
+              border: "2px solid rgba(34, 197, 94, 0.4)",
+              borderRadius: 30,
+              padding: "32px 36px",
+              width: "100%",
+              maxWidth: 500,
+              boxShadow: "0 25px 60px rgba(0,0,0,0.85), 0 0 40px rgba(34,197,94,0.15)",
+              color: "#fff",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 28 }}>⏱️</span>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>
+                    Audio Trigger Duration
+                  </div>
+                  <div style={{ fontSize: 13, color: "#86efac", fontWeight: 600 }}>
+                    Kitni der baad background voice/music baje
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCustomIntervalModal(false)}
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "none",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                  borderRadius: "50%",
+                  padding: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Quick Presets */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+                Quick Preset Times:
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                {[
+                  { label: "Continuous (Loop)", sec: 0 },
+                  { label: "30 Seconds", sec: 30 },
+                  { label: "1 Minute", sec: 60 },
+                  { label: "2 Minutes", sec: 120 },
+                  { label: "3 Minutes", sec: 180 },
+                  { label: "5 Minutes", sec: 300 },
+                ].map((item) => (
+                  <button
+                    key={item.sec}
+                    onClick={() => {
+                      changeAudioInterval(item.sec);
+                      setShowCustomIntervalModal(false);
+                      setSyncToast(`Audio interval: ${item.label}!`);
+                      setTimeout(() => setSyncToast(null), 2500);
+                    }}
+                    style={{
+                      padding: "10px 8px",
+                      borderRadius: 14,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      backgroundColor: audioIntervalSec === item.sec ? "rgba(34, 197, 94, 0.3)" : "rgba(255,255,255,0.05)",
+                      border: `1.5px solid ${audioIntervalSec === item.sec ? "#22c55e" : "rgba(255,255,255,0.1)"}`,
+                      color: audioIntervalSec === item.sec ? "#4ade80" : "#e2e8f0",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Exact Time Form */}
+            <div style={{ padding: "18px 20px", borderRadius: 20, backgroundColor: "rgba(0, 0, 0, 0.4)", border: "1.5px solid rgba(34, 197, 94, 0.3)" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#86efac", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <span>✨</span>
+                <span>Enter Any Custom Duration:</span>
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const totalSec = customIntervalUnit === "min" ? customIntervalValue * 60 : customIntervalValue;
+                  if (isNaN(totalSec) || totalSec < 0) return;
+                  changeAudioInterval(totalSec);
+                  setShowCustomIntervalModal(false);
+                  setSyncToast(`Audio Interval set to ${customIntervalValue} ${customIntervalUnit === "min" ? "Minutes" : "Seconds"}!`);
+                  setTimeout(() => setSyncToast(null), 2500);
+                }}
+                style={{ display: "flex", gap: 10, alignItems: "center" }}
+              >
+                <input
+                  type="number"
+                  min="1"
+                  max="7200"
+                  value={customIntervalValue || ""}
+                  onChange={(e) => setCustomIntervalValue(Math.max(1, parseInt(e.target.value) || 0))}
+                  placeholder="e.g. 45"
+                  style={{
+                    flex: 1,
+                    padding: "12px 16px",
+                    borderRadius: 14,
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    border: "2px solid #22c55e",
+                    color: "#fff",
+                    fontSize: 16,
+                    fontWeight: 800,
+                    outline: "none",
+                  }}
+                />
+                <select
+                  value={customIntervalUnit}
+                  onChange={(e) => setCustomIntervalUnit(e.target.value as "sec" | "min")}
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    border: "2px solid rgba(255,255,255,0.2)",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    outline: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="sec" style={{ backgroundColor: "#0f172a" }}>Seconds</option>
+                  <option value="min" style={{ backgroundColor: "#0f172a" }}>Minutes</option>
+                </select>
+                <button
+                  type="submit"
+                  style={{
+                    padding: "12px 22px",
+                    borderRadius: 14,
+                    backgroundColor: "#22c55e",
+                    border: "none",
+                    color: "#052e16",
+                    fontSize: 15,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 15px rgba(34, 197, 94, 0.4)",
+                  }}
+                >
+                  Set Time
+                </button>
+              </form>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 10 }}>
+                💡 Example: 45 seconds, 90 seconds, 10 minutes ya 15 minutes daal sakte hain.
+              </div>
             </div>
           </div>
         </div>
