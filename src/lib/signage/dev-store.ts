@@ -53,11 +53,15 @@ class DevStore {
       if (fs.existsSync(filePath)) {
         const raw = fs.readFileSync(filePath, "utf-8");
         const data = JSON.parse(raw);
-        if (data.promotions && Array.isArray(data.promotions) && data.promotions.length > 0) {
-          this.promotions = data.promotions;
+        if (data.promotions && Array.isArray(data.promotions)) {
+          this.promotions = data.promotions.filter(
+            (p: any) => p && p.id !== "demo-onion" && p.id !== "demo-apple"
+          );
         }
-        if (data.playlist && Array.isArray(data.playlist) && data.playlist.length > 0) {
-          this.playlist = data.playlist;
+        if (data.playlist && Array.isArray(data.playlist)) {
+          this.playlist = data.playlist.filter(
+            (item: any) => item && item.promotion_id !== "demo-onion" && item.promotion_id !== "demo-apple"
+          );
         }
         if (data.branding) {
           this.branding = data.branding;
@@ -118,67 +122,9 @@ class DevStore {
     this.mediaMap[id] = url;
     this.save();
   }
-  promotions: Promotion[] = [
-    {
-      id: "demo-onion",
-      title: "Fresh Nashik Onion",
-      price_text: "₹38 / kg",
-      duration_sec: 10,
-      status: "live",
-      enabled: true,
-      created_at: "2026-10-30T00:00:00.000Z",
-      updated_at: "2026-10-30T00:00:00.000Z",
-      media: {
-        id: "m-1",
-        kind: "image",
-        storage_path: "demo",
-        mime: "image/jpeg",
-        bytes: 400000,
-        sha256: "abc",
-        created_at: "2026-10-30T00:00:00.000Z",
-        thumb_path:
-          "https://images.unsplash.com/photo-1508747703725-719777637510?q=80&w=1920&auto=format&fit=crop",
-      },
-    },
-    {
-      id: "demo-apple",
-      title: "Kashmiri Royal Apples",
-      price_text: "₹120 / kg",
-      duration_sec: 12,
-      status: "live",
-      enabled: true,
-      created_at: "2026-10-30T00:00:00.000Z",
-      updated_at: "2026-10-30T00:00:00.000Z",
-      media: {
-        id: "m-2",
-        kind: "image",
-        storage_path: "demo",
-        mime: "image/jpeg",
-        bytes: 500000,
-        sha256: "def",
-        created_at: "2026-10-30T00:00:00.000Z",
-        thumb_path:
-          "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?q=80&w=1920&auto=format&fit=crop",
-      },
-    },
-  ];
+  promotions: Promotion[] = [];
 
-  playlist: PlaylistItem[] = [
-    {
-      id: "pl-1",
-      playlist_id: "default",
-      promotion_id: "demo-onion",
-      position: 1,
-      enabled: true,
-    },
-    {
-      id: "pl-2",
-      playlist_id: "default",
-      promotion_id: "demo-apple",
-      position: 2,
-      enabled: true,
-    },
-  ];
+  playlist: PlaylistItem[] = [];
 
   branding: Branding = {
     id: "branding-default",
@@ -215,11 +161,18 @@ class DevStore {
 
   mediaMap: Record<string, string> = {};
 
-  audioSettings = {
-    enabled: false,
+  audioSettings: {
+    enabled: boolean;
+    url: string;
+    volume: number;
+    loop: boolean;
+    interval_sec?: number;
+  } = {
+    enabled: true,
     url: "/store-audio.mp3",
     volume: 80, // 0 - 100
     loop: true,
+    interval_sec: 120,
   };
 
   voiceSettings: VoiceSettings = {
@@ -277,7 +230,7 @@ class DevStore {
 
   version: number = 1;
 
-  updateAudio(settings: Partial<{ enabled: boolean; url: string; volume: number; loop: boolean }>) {
+  updateAudio(settings: Partial<{ enabled: boolean; url: string; volume: number; loop: boolean; interval_sec?: number }>) {
     this.audioSettings = {
       ...this.audioSettings,
       ...settings,
@@ -573,6 +526,7 @@ class DevStore {
         url: this.audioSettings?.url ?? "/store-audio.mp3",
         volume: (this.audioSettings?.volume ?? 80) / 100,
         loop: this.audioSettings?.loop ?? true,
+        interval_sec: this.audioSettings?.interval_sec ?? 120,
       },
       active_announcement: this.activeAnnouncement,
     };

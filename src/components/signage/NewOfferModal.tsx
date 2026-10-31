@@ -33,8 +33,8 @@ async function compressClientImage(
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const MAX_WIDTH = 1920;
-        const MAX_HEIGHT = 1080;
+        const MAX_WIDTH = 1280;
+        const MAX_HEIGHT = 720;
         let width = img.width;
         let height = img.height;
 
@@ -55,9 +55,9 @@ async function compressClientImage(
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
         const ratio = img.width / img.height;
-        const isWide = ratio >= 1.6 && ratio <= 1.95;
+        const isWide = ratio >= 1.5 && ratio <= 2.1;
 
         canvas.toBlob(
           (blob) => {
@@ -73,7 +73,7 @@ async function compressClientImage(
             }
           },
           "image/jpeg",
-          0.82
+          0.72
         );
       };
       img.onerror = () => {
@@ -190,6 +190,42 @@ export default function NewOfferModal({
     }
     setIsPublishing(true);
     setSaveError(null);
+
+    // INSTANT OPTIMISTIC SAVE: Save to local storage and sync to TV immediately (0ms latency!)
+    const tempId = "promo-" + Date.now();
+    const optimisticPromo = {
+      id: tempId,
+      title: title.trim(),
+      price_text: priceText.trim() || null,
+      duration_sec: durationSec || 8,
+      status: publishImmediately ? "live" : "draft",
+      enabled: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      media_id: imageUrl,
+      media: {
+        id: "media-" + tempId,
+        storage_path: imageUrl,
+        thumb_path: imageUrl,
+        mime: "image/jpeg",
+        bytes: 50000,
+        sha256: "optimistic",
+        kind: "image",
+      },
+    };
+
+    try {
+      const cached = localStorage.getItem("kathua_signage_promotions");
+      const list = cached ? JSON.parse(cached) : [];
+      const updated = [optimisticPromo, ...(Array.isArray(list) ? list.filter((p: any) => p.id !== "demo-onion" && p.id !== "demo-apple") : [])];
+      localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
+      localStorage.setItem("signage_force_refresh", Date.now().toString());
+
+      const syncChannel = new BroadcastChannel("kathua_tv_sync");
+      syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+      syncChannel.close();
+    } catch {}
+
     try {
       let finalMediaId: string | null = null;
 

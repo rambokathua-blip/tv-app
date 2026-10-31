@@ -43,6 +43,7 @@ export default function VoiceAnnouncementsPage() {
   // Background Audio State
   const [audioBgEnabled, setAudioBgEnabled] = useState(true);
   const [audioBgVolume, setAudioBgVolume] = useState(80);
+  const [audioBgInterval, setAudioBgInterval] = useState<number>(120);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const phoneAudioRef = useRef<HTMLAudioElement | null>(null);
   const speechAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -131,6 +132,9 @@ export default function VoiceAnnouncementsPage() {
           }
           if (typeof data.audio.volume === "number") {
             setAudioBgVolume(data.audio.volume);
+          }
+          if (typeof data.audio.interval_sec === "number") {
+            setAudioBgInterval(data.audio.interval_sec);
           }
         }
         if (Array.isArray(data.announcements)) {
@@ -383,6 +387,28 @@ export default function VoiceAnnouncementsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ volume: vol }),
       });
+    } catch {
+      // ignore
+    }
+  };
+
+  // Update Background Audio Interval / Gap
+  const handleUpdateBgInterval = async (sec: number) => {
+    setAudioBgInterval(sec);
+    setFeedbackMsg({
+      type: "info",
+      text: sec === 0 ? "TV Background Audio loop: Continuous (hamesha bajega)" : `TV Background Audio: Har ${sec >= 60 ? sec / 60 + " min" : sec + " sec"} baad trigger hoga`,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+    try {
+      await fetch("/api/signage/admin/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval_sec: sec }),
+      });
+      const ch = new BroadcastChannel("kathua_tv_sync");
+      ch.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+      ch.close();
     } catch {
       // ignore
     }
@@ -732,6 +758,44 @@ export default function VoiceAnnouncementsPage() {
               onChange={(e) => handleUpdateBgVolume(Number(e.target.value))}
               className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
             />
+          </div>
+
+          {/* Audio Interval Selector (Timer) */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <div className="flex justify-between text-xs font-semibold text-slate-300 mb-2">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                Audio Trigger Gap (Kitne der baad baje)
+              </span>
+              <span className="text-emerald-400 font-bold">
+                {audioBgInterval === 0
+                  ? "Continuous Loop"
+                  : `Har ${audioBgInterval >= 60 ? audioBgInterval / 60 + " min" : audioBgInterval + "s"}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {[
+                { label: "Continuous", sec: 0 },
+                { label: "30 Sec", sec: 30 },
+                { label: "1 Min", sec: 60 },
+                { label: "2 Min", sec: 120 },
+                { label: "3 Min", sec: 180 },
+                { label: "5 Min", sec: 300 },
+              ].map((item) => (
+                <button
+                  key={item.sec}
+                  type="button"
+                  onClick={() => handleUpdateBgInterval(item.sec)}
+                  className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all text-center ${
+                    audioBgInterval === item.sec
+                      ? "bg-emerald-500 text-slate-950 shadow-md font-black"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

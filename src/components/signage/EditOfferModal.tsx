@@ -75,8 +75,8 @@ async function compressClientImage(
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const MAX_WIDTH = 1920;
-        const MAX_HEIGHT = 1080;
+        const MAX_WIDTH = 1280;
+        const MAX_HEIGHT = 720;
         let width = img.width;
         let height = img.height;
 
@@ -97,7 +97,7 @@ async function compressClientImage(
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
         const ratio = img.width / img.height;
         const isWide = ratio >= 1.5 && ratio <= 2.1;
 
@@ -115,7 +115,7 @@ async function compressClientImage(
             }
           },
           "image/jpeg",
-          0.85
+          0.72
         );
       };
       img.onerror = () => {

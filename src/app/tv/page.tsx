@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
 import {
   MoreVertical,
@@ -46,37 +46,28 @@ const FALLBACK_MANIFEST: SignageManifest = {
   ],
   slides: [
     {
-      id: "welcome-slide",
-      promotion_id: "promo-welcome",
+      id: "welcome-slide-1",
+      promotion_id: "promo-welcome-1",
       title: "Welcome to Kathua Fresh",
       price_text: "Fresh & Organic Daily",
-      duration_sec: 10,
+      duration_sec: 8,
       image_url: "/kathua-fresh-logo.jpg",
     },
     {
-      id: "demo-onion",
-      promotion_id: "promo-onion",
-      title: "Fresh Nashik Onions",
-      price_text: "₹38 / kg",
-      duration_sec: 10,
-      image_url:
-        "https://images.unsplash.com/photo-1508747703725-719777637510?q=80&w=1920&auto=format&fit=crop",
-    },
-    {
-      id: "demo-apple",
-      promotion_id: "promo-apple",
-      title: "Kashmiri Royal Apples",
-      price_text: "₹120 / kg",
-      duration_sec: 10,
-      image_url:
-        "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?q=80&w=1920&auto=format&fit=crop",
+      id: "welcome-slide-2",
+      promotion_id: "promo-welcome-2",
+      title: "Farm Fresh Fruits & Vegetables",
+      price_text: "100% Quality Assured",
+      duration_sec: 8,
+      image_url: "/kathua-fresh-logo.jpg",
     },
   ],
   audio: {
-    enabled: false,
+    enabled: true,
     url: "/store-audio.mp3",
     volume: 0.8,
     loop: true,
+    interval_sec: 120,
   },
 };
 
@@ -165,19 +156,37 @@ export default function TvPlayerPage() {
   const announcementAudioRef = useRef<HTMLAudioElement | null>(null);
   const wasBgPlayingRef = useRef<boolean>(false);
 
-  // Background Audio State & Controls
+  // Background Audio State & Controls with Interval Timer
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const isMutedParam = params.get("muted") === "true";
       const isInIframe = window.self !== window.top;
+      const userPref = localStorage.getItem("kathua_tv_audio_muted");
+      if (userPref !== null) {
+        return userPref === "true" || isMutedParam || isInIframe;
+      }
       return isMutedParam || isInIframe;
     }
     return false;
   });
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+
+  // Audio Interval State (0 = continuous loop, 30 = 30s, 60 = 1m, 120 = 2m, 180 = 3m, 300 = 5m)
+  const [audioIntervalSec, setAudioIntervalSec] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("kathua_tv_audio_interval");
+      if (saved !== null) {
+        const val = Number(saved);
+        if (!isNaN(val)) return val;
+      }
+    }
+    return 120; // Default: every 2 minutes
+  });
+  const [audioIntervalCountdown, setAudioIntervalCountdown] = useState<number | null>(null);
+  const intervalCountdownRef = useRef<NodeJS.Timeout | null>(null);
 
   // Listen for audio control messages from parent window (e.g. Admin Dashboard)
   useEffect(() => {
@@ -194,6 +203,10 @@ export default function TvPlayerPage() {
         if (announcementAudioRef.current) {
           announcementAudioRef.current.pause();
         }
+        if (intervalCountdownRef.current) {
+          clearInterval(intervalCountdownRef.current);
+        }
+        setAudioIntervalCountdown(null);
         if (typeof window !== "undefined" && "speechSynthesis" in window) {
           window.speechSynthesis.cancel();
         }
@@ -206,6 +219,7 @@ export default function TvPlayerPage() {
           setIsAudioMuted(false);
           if (audioRef.current) {
             audioRef.current.muted = false;
+            audioRef.current.play().catch(() => {});
           }
         }
       }
@@ -214,15 +228,80 @@ export default function TvPlayerPage() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  // Handler when audio playback finishes (triggers interval countdown for next play)
+  const handleAudioEnded = useCallback(() => {
+    if (isAudioMuted || activeBroadcast) return;
+
+    if (audioIntervalSec === 0) {
+      // Continuous loop mode: immediately loop back
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+      return;
+    }
+
+    // Interval mode: Pause, then start countdown until next trigger
+    setIsAudioPlaying(false);
+    let remaining = audioIntervalSec;
+    setAudioIntervalCountdown(remaining);
+
+    if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+    intervalCountdownRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+        setAudioIntervalCountdown(null);
+        const audio = audioRef.current;
+        if (audio && !isAudioMuted && !activeBroadcast) {
+          audio.currentTime = 0;
+          audio
+            .play()
+            .then(() => setIsAudioPlaying(true))
+            .catch(() => {});
+        }
+      } else {
+        setAudioIntervalCountdown(remaining);
+      }
+    }, 1000);
+  }, [audioIntervalSec, isAudioMuted, activeBroadcast]);
+
+  // Adjust audio trigger interval
+  const changeAudioInterval = useCallback((sec: number) => {
+    setAudioIntervalSec(sec);
+    try {
+      localStorage.setItem("kathua_tv_audio_interval", sec.toString());
+    } catch {}
+
+    fetch("/api/signage/admin/audio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interval_sec: sec }),
+    }).catch(() => {});
+
+    if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+    setAudioIntervalCountdown(null);
+
+    const audio = audioRef.current;
+    if (audio && !isAudioMuted && !activeBroadcast) {
+      if (sec === 0) {
+        audio.loop = true;
+        audio.play().catch(() => {});
+      } else {
+        audio.loop = false;
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+    }
+  }, [isAudioMuted, activeBroadcast]);
+
   // Sync background audio with manifest and user preference
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
-    const isRemotelyEnabled = audioConfig?.enabled ?? false;
-    const shouldPlay = isRemotelyEnabled && !isAudioMuted;
-
     if (audioConfig?.volume !== undefined) {
       audio.volume = Math.max(0, Math.min(1, audioConfig.volume));
     }
@@ -230,8 +309,9 @@ export default function TvPlayerPage() {
     // Do not resume background audio if a live announcement is currently broadcasting
     if (activeBroadcast) return;
 
-    if (shouldPlay) {
+    if (!isAudioMuted) {
       audio.muted = false;
+      audio.loop = audioIntervalSec === 0;
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise
@@ -240,7 +320,6 @@ export default function TvPlayerPage() {
             setAutoplayBlocked(false);
           })
           .catch(() => {
-            // Browser autoplay restrictions blocked audio
             setIsAudioPlaying(false);
             setAutoplayBlocked(true);
           });
@@ -249,16 +328,17 @@ export default function TvPlayerPage() {
       audio.pause();
       audio.muted = true;
       setIsAudioPlaying(false);
+      if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+      setAudioIntervalCountdown(null);
     }
-  }, [manifest.audio, isAudioMuted, activeBroadcast]);
+  }, [manifest.audio, isAudioMuted, activeBroadcast, audioIntervalSec]);
 
-  // Click / Key gesture to unblock autoplay (strictly only if remotely enabled AND not muted)
+  // Click / Key gesture to unblock autoplay
   useEffect(() => {
     const handleGesture = () => {
-      const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
-      const isRemotelyEnabled = audioConfig?.enabled ?? false;
-      if (autoplayBlocked && audioRef.current && !isAudioMuted && isRemotelyEnabled) {
+      if (autoplayBlocked && audioRef.current && !isAudioMuted) {
         audioRef.current.muted = false;
+        audioRef.current.loop = audioIntervalSec === 0;
         audioRef.current
           .play()
           .then(() => {
@@ -274,31 +354,45 @@ export default function TvPlayerPage() {
       window.removeEventListener("click", handleGesture);
       window.removeEventListener("keydown", handleGesture);
     };
-  }, [autoplayBlocked, isAudioMuted, manifest.audio]);
+  }, [autoplayBlocked, isAudioMuted, audioIntervalSec]);
 
-  const toggleTvAudio = () => {
+  // Direct 1-tap Toggle for User Screen Audio (Always responsive, zero blocking)
+  const toggleTvAudio = (forceState?: boolean) => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
-    const isRemotelyEnabled = audioConfig?.enabled ?? false;
+    const willPlay = forceState !== undefined ? forceState : (isAudioMuted || audio.paused);
 
-    if (isAudioMuted || audio.paused) {
-      if (!isRemotelyEnabled) return;
+    if (willPlay) {
+      if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+      setAudioIntervalCountdown(null);
+
       audio.muted = false;
+      audio.loop = audioIntervalSec === 0;
+      audio.currentTime = 0;
       audio
         .play()
         .then(() => {
           setIsAudioMuted(false);
           setIsAudioPlaying(true);
           setAutoplayBlocked(false);
+          try {
+            localStorage.setItem("kathua_tv_audio_muted", "false");
+          } catch {}
         })
-        .catch(() => {});
+        .catch(() => {
+          setAutoplayBlocked(true);
+        });
     } else {
       audio.pause();
       audio.muted = true;
       setIsAudioMuted(true);
       setIsAudioPlaying(false);
+      if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+      setAudioIntervalCountdown(null);
+      try {
+        localStorage.setItem("kathua_tv_audio_muted", "true");
+      } catch {}
     }
   };
 
@@ -392,9 +486,25 @@ export default function TvPlayerPage() {
             const otherSlides = (manifestData.slides || []).filter(
               (s) => !localIds.has(s.id) && s.id !== "demo-onion" && s.id !== "demo-apple"
             );
+            const combined = [...localSlides, ...otherSlides];
+            const finalSlides =
+              combined.length === 1
+                ? [
+                    combined[0],
+                    {
+                      id: "welcome-slide-brand",
+                      promotion_id: "promo-welcome-brand",
+                      title: "Kathua Fresh Store",
+                      price_text: "Quality Assured | Always Fresh",
+                      duration_sec: 8,
+                      image_url: "/kathua-fresh-logo.jpg",
+                    },
+                  ]
+                : combined;
+
             return {
               ...manifestData,
-              slides: [...localSlides, ...otherSlides],
+              slides: finalSlides,
             };
           }
         }
@@ -416,8 +526,7 @@ export default function TvPlayerPage() {
         setManifest(data);
         localStorage.setItem("signage_cached_manifest", JSON.stringify(data));
         setIsOffline(false);
-        setCurrentIndex(0);
-        setSlideProgress(0);
+        setCurrentIndex((prev) => (data.slides && data.slides.length > 0 && prev < data.slides.length ? prev : 0));
         return;
       }
     } catch {
@@ -430,8 +539,7 @@ export default function TvPlayerPage() {
       const base = cached ? JSON.parse(cached) : FALLBACK_MANIFEST;
       const enriched = enrichWithLocalPromotions(base);
       setManifest(enriched);
-      setCurrentIndex(0);
-      setSlideProgress(0);
+      setCurrentIndex((prev) => (enriched.slides && enriched.slides.length > 0 && prev < enriched.slides.length ? prev : 0));
     } catch {}
   }, [token, enrichWithLocalPromotions]);
 
@@ -643,14 +751,32 @@ export default function TvPlayerPage() {
     }
   }, [manifest.qr_codes]);
 
-  // Slideshow Cycle
-  const slides = manifest.slides && manifest.slides.length > 0 ? manifest.slides : FALLBACK_MANIFEST.slides;
+  // Slideshow Cycle (Always ensures >= 2 slides, alternating with store branding if 1 offer)
+  const slides = useMemo(() => {
+    const raw = (manifest.slides && manifest.slides.length > 0 ? manifest.slides : FALLBACK_MANIFEST.slides)
+      .filter((s) => s.id !== "demo-onion" && s.id !== "demo-apple");
+    if (raw.length === 1) {
+      return [
+        raw[0],
+        {
+          id: "welcome-slide-brand",
+          promotion_id: "promo-welcome-brand",
+          title: "Kathua Fresh Store",
+          price_text: "Quality Assured | Always Fresh",
+          duration_sec: 8,
+          image_url: "/kathua-fresh-logo.jpg",
+        },
+      ];
+    }
+    return raw.length > 0 ? raw : FALLBACK_MANIFEST.slides;
+  }, [manifest.slides]);
 
   useEffect(() => {
     if (slides.length <= 1 || isPaused) return;
 
-    const currentSlide = slides[currentIndex] || slides[0];
-    const duration = (currentSlide.duration_sec || 10) * 1000;
+    const safeIndex = currentIndex % slides.length;
+    const currentItem = slides[safeIndex] || slides[0];
+    const duration = Math.max(4, currentItem.duration_sec || 8) * 1000;
     const startTime = Date.now();
 
     // Progress bar update
@@ -662,7 +788,7 @@ export default function TvPlayerPage() {
 
     // Slide transition timer
     const slideTimer = setTimeout(() => {
-      const next = (currentIndex + 1) % slides.length;
+      const next = (safeIndex + 1) % slides.length;
       setNextIndex(next);
       setIsFading(true);
 
@@ -677,7 +803,7 @@ export default function TvPlayerPage() {
       clearInterval(progressInterval);
       clearTimeout(slideTimer);
     };
-  }, [slides, currentIndex, isPaused]);
+  }, [currentIndex, slides.length, isPaused]);
 
   // Speech Announcement trigger
   const triggerAnnouncement = useCallback(
@@ -711,8 +837,10 @@ export default function TvPlayerPage() {
   }, [slides.length]);
 
   // Active Slideshow Rendering
-  const currentSlide: ManifestSlide = slides[currentIndex] || slides[0];
-  const nextSlide: ManifestSlide = slides[nextIndex] || slides[0];
+  const safeCurrentIndex = slides.length > 0 ? currentIndex % slides.length : 0;
+  const currentSlide: ManifestSlide = slides[safeCurrentIndex] || slides[0];
+  const safeNextIndex = slides.length > 0 ? nextIndex % slides.length : 0;
+  const nextSlide: ManifestSlide = slides[safeNextIndex] || slides[0];
 
   return (
     <div
@@ -1657,7 +1785,7 @@ export default function TvPlayerPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             {/* TV Audio Mute / Unmute Toggle Button */}
             <button
-              onClick={toggleTvAudio}
+              onClick={() => toggleTvAudio()}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1696,6 +1824,56 @@ export default function TvPlayerPage() {
                 </>
               )}
             </button>
+
+            {/* Audio Interval Selector Pill */}
+            {!isAudioMuted && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "8px 18px",
+                  borderRadius: 30,
+                  backgroundColor: "rgba(15, 23, 42, 0.85)",
+                  border: "1.5px solid rgba(34, 197, 94, 0.4)",
+                  color: "#86efac",
+                  fontSize: 16,
+                  fontWeight: 800,
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <span>⏱️</span>
+                <span>
+                  {audioIntervalSec === 0
+                    ? "Loop: Continuous"
+                    : audioIntervalCountdown !== null
+                    ? `Next Sound: in ${audioIntervalCountdown}s`
+                    : `Sound Gap: ${audioIntervalSec >= 60 ? audioIntervalSec / 60 + " min" : audioIntervalSec + " sec"}`}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const intervals = [0, 30, 60, 120, 180, 300];
+                    const next = (intervals.indexOf(audioIntervalSec) + 1) % intervals.length;
+                    changeAudioInterval(intervals[next]);
+                  }}
+                  title="Click to cycle sound interval"
+                  style={{
+                    backgroundColor: "rgba(34, 197, 94, 0.25)",
+                    border: "1px solid #22c55e",
+                    color: "#ffffff",
+                    borderRadius: 16,
+                    padding: "3px 10px",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Adjust ▾
+                </button>
+              </div>
+            )}
 
             <div
               style={{
@@ -1779,7 +1957,7 @@ export default function TvPlayerPage() {
       {/* Autoplay prompt banner if browser blocked audio initially */}
       {autoplayBlocked && (
         <button
-          onClick={toggleTvAudio}
+          onClick={() => toggleTvAudio()}
           style={{
             position: "absolute",
             top: 24,
@@ -1853,13 +2031,14 @@ export default function TvPlayerPage() {
       <audio
         ref={audioRef}
         src={manifest.audio?.url || "/store-audio.mp3"}
-        loop={manifest.audio?.loop ?? true}
-        preload="none"
+        loop={audioIntervalSec === 0}
+        preload="auto"
         muted={isAudioMuted}
         onPlay={() => {
           setIsAudioPlaying(true);
           setAutoplayBlocked(false);
         }}
+        onEnded={handleAudioEnded}
         onPause={() => setIsAudioPlaying(false)}
       />
 
@@ -2153,37 +2332,96 @@ export default function TvPlayerPage() {
               </div>
             </button>
 
-            {/* Action 5: Audio Toggle */}
-            <button
-              onClick={() => {
-                toggleTvAudio();
-                setShowQuickMenu(false);
-              }}
+            {/* Action 5: Audio & Interval Timer Settings Card */}
+            <div
               style={{
+                padding: "12px 14px",
+                borderRadius: 16,
+                backgroundColor: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
                 display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 14px",
-                borderRadius: 14,
-                backgroundColor: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.06)",
-                color: "#ffffff",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
+                flexDirection: "column",
+                gap: 10,
               }}
             >
-              {isAudioMuted ? (
-                <VolumeX size={18} style={{ flexShrink: 0, color: "#f87171" }} />
-              ) : (
-                <Volume2 size={18} style={{ flexShrink: 0, color: "#4ade80" }} />
-              )}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>
-                  {isAudioMuted ? "Unmute Background Music" : "Mute Background Music"}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {isAudioMuted ? (
+                    <VolumeX size={18} style={{ color: "#f87171" }} />
+                  ) : (
+                    <Volume2 size={18} style={{ color: "#4ade80" }} />
+                  )}
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
+                      Store Background Music
+                    </div>
+                    <div style={{ fontSize: 10, color: !isAudioMuted ? "#86efac" : "#fca5a5" }}>
+                      {!isAudioMuted
+                        ? isAudioPlaying
+                          ? "Playing Now 🔊"
+                          : audioIntervalCountdown !== null
+                          ? `Next Sound: in ${audioIntervalCountdown}s ⏱️`
+                          : "Active"
+                        : "Sound Muted 🔇"}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => toggleTvAudio()}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 20,
+                    backgroundColor: !isAudioMuted ? "#22c55e" : "rgba(239, 68, 68, 0.3)",
+                    border: `1px solid ${!isAudioMuted ? "#22c55e" : "#ef4444"}`,
+                    color: !isAudioMuted ? "#022c22" : "#ffffff",
+                    fontSize: 11,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}
+                >
+                  {!isAudioMuted ? "ON" : "OFF"}
+                </button>
+              </div>
+
+              {/* Interval Timer Trigger Options */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>
+                  Trigger Interval (Kitne der baad baje):
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                  {[
+                    { label: "Loop (Continuous)", sec: 0 },
+                    { label: "30 Sec", sec: 30 },
+                    { label: "1 Min", sec: 60 },
+                    { label: "2 Min", sec: 120 },
+                    { label: "3 Min", sec: 180 },
+                    { label: "5 Min", sec: 300 },
+                  ].map((item) => {
+                    const isSelected = audioIntervalSec === item.sec;
+                    return (
+                      <button
+                        key={item.sec}
+                        onClick={() => changeAudioInterval(item.sec)}
+                        style={{
+                          padding: "6px 4px",
+                          borderRadius: 10,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          backgroundColor: isSelected ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.04)",
+                          border: `1px solid ${isSelected ? "#22c55e" : "rgba(255,255,255,0.1)"}`,
+                          color: isSelected ? "#4ade80" : "rgba(255,255,255,0.7)",
+                          cursor: "pointer",
+                          textAlign: "center",
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </button>
+            </div>
 
             {/* Action 6: Hard Reload TV App */}
             <button

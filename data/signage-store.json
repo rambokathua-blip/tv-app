@@ -1,107 +1,7 @@
 {
-  "version": 10,
-  "promotions": [
-    {
-      "id": "demo-onion",
-      "title": "Fresh Nashik Onion",
-      "price_text": "₹38 / kg",
-      "duration_sec": 10,
-      "status": "live",
-      "enabled": true,
-      "created_at": "2026-10-30T00:00:00.000Z",
-      "updated_at": "2026-10-30T17:29:59.506Z",
-      "media": {
-        "id": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg",
-        "kind": "image",
-        "storage_path": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg",
-        "mime": "image/jpeg",
-        "bytes": 200000,
-        "sha256": "dev-hash",
-        "created_at": "2026-10-30T17:29:59.506Z",
-        "thumb_path": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg"
-      },
-      "media_id": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg"
-    },
-    {
-      "id": "demo-apple",
-      "title": "Kashmiri Royal Apples (Premium)",
-      "price_text": "₹130 / kg",
-      "duration_sec": 10,
-      "status": "draft",
-      "enabled": false,
-      "created_at": "2026-10-30T00:00:00.000Z",
-      "updated_at": "2026-10-30T17:43:23.368Z",
-      "media": {
-        "id": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop",
-        "kind": "image",
-        "storage_path": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop",
-        "mime": "image/jpeg",
-        "bytes": 200000,
-        "sha256": "dev-hash",
-        "created_at": "2026-10-30T17:43:23.367Z",
-        "thumb_path": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop"
-      },
-      "media_id": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop"
-    }
-  ],
-  "playlist": [
-    {
-      "id": "pl-1",
-      "playlist_id": "default",
-      "promotion_id": "demo-onion",
-      "position": 2,
-      "enabled": true,
-      "promotion": {
-        "id": "demo-onion",
-        "title": "Fresh Nashik Onion",
-        "price_text": "₹38 / kg",
-        "duration_sec": 10,
-        "status": "live",
-        "enabled": true,
-        "created_at": "2026-10-30T00:00:00.000Z",
-        "updated_at": "2026-10-30T17:29:59.506Z",
-        "media": {
-          "id": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg",
-          "kind": "image",
-          "storage_path": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg",
-          "mime": "image/jpeg",
-          "bytes": 200000,
-          "sha256": "dev-hash",
-          "created_at": "2026-10-30T17:29:59.506Z",
-          "thumb_path": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg"
-        },
-        "media_id": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg"
-      }
-    },
-    {
-      "id": "pl-2",
-      "playlist_id": "default",
-      "promotion_id": "demo-apple",
-      "position": 3,
-      "enabled": true,
-      "promotion": {
-        "id": "demo-apple",
-        "title": "Kashmiri Royal Apples (Premium)",
-        "price_text": "₹130 / kg",
-        "duration_sec": 10,
-        "status": "draft",
-        "enabled": false,
-        "created_at": "2026-10-30T00:00:00.000Z",
-        "updated_at": "2026-10-30T17:43:23.368Z",
-        "media": {
-          "id": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop",
-          "kind": "image",
-          "storage_path": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop",
-          "mime": "image/jpeg",
-          "bytes": 200000,
-          "sha256": "dev-hash",
-          "created_at": "2026-10-30T17:43:23.367Z",
-          "thumb_path": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop"
-        },
-        "media_id": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?q=80&w=1920&auto=format&fit=crop"
-      }
-    }
-  ],
+  "version": 11,
+  "promotions": [],
+  "playlist": [],
   "branding": {
     "id": "branding-default",
     "logo_url": "/kathua-fresh-logo.jpg",
@@ -110,7 +10,7 @@
     "ticker_text": "Welcome to Kathua Fresh • Quality Assured | Always Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Quality Guaranteed • Scan WhatsApp QR for Wholesale Rates",
     "ticker_enabled": true,
     "layout_profile": "standard",
-    "updated_at": "2026-10-30T00:00:00.000Z"
+    "updated_at": "2026-10-31T00:00:00.000Z"
   },
   "qrCodes": [
     {
@@ -132,21 +32,13 @@
       "created_at": "2026-10-30T00:00:00.000Z"
     }
   ],
-  "mediaMap": {
-    "media-11e63086-b9e4-4d93-8d37-ee3aeb35dbf4": "/uploads/ff57c4a6-5451-44cb-b995-6983214d208f.jpg",
-    "/uploads/ff57c4a6-5451-44cb-b995-6983214d208f.jpg": "/uploads/ff57c4a6-5451-44cb-b995-6983214d208f.jpg",
-    "media-47aefb27-d7d8-4cb7-9ad2-ddfba4fe2133": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg",
-    "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg": "/uploads/5fb40863-4bc6-4832-9795-9562e0f31b48.jpg",
-    "media-4d010248-ccb9-440d-bfdb-fb3f1fd3809b": "/uploads/b15ba954-3a71-4b95-986b-7c2336f2107f.jpg",
-    "/uploads/b15ba954-3a71-4b95-986b-7c2336f2107f.jpg": "/uploads/b15ba954-3a71-4b95-986b-7c2336f2107f.jpg",
-    "media-0169bf77-b4ff-405d-be01-8cc66fd256c2": "/uploads/ba36d634-5112-44d1-8b2f-40907b6e127f.jpg",
-    "/uploads/ba36d634-5112-44d1-8b2f-40907b6e127f.jpg": "/uploads/ba36d634-5112-44d1-8b2f-40907b6e127f.jpg"
-  },
+  "mediaMap": {},
   "audioSettings": {
-    "enabled": false,
+    "enabled": true,
     "url": "/store-audio.mp3",
     "volume": 80,
-    "loop": true
+    "loop": true,
+    "interval_sec": 120
   },
   "voiceSettings": {
     "master_enabled": true,
@@ -190,5 +82,5 @@
       "created_at": "2026-10-30T00:00:00.000Z"
     }
   ],
-  "updated_at": "2026-10-31T02:22:26.581Z"
+  "updated_at": "2026-10-31T15:45:00.000Z"
 }

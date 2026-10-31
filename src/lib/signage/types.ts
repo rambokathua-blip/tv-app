@@ -159,6 +159,7 @@ export interface SignageManifest {
     url: string;
     volume: number;
     loop: boolean;
+    interval_sec?: number;
   };
   active_announcement?: {
     id: string;

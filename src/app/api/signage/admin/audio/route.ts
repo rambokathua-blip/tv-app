@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       volume: typeof body.volume === "number" ? body.volume : undefined,
       loop: typeof body.loop === "boolean" ? body.loop : undefined,
       url: typeof body.url === "string" ? body.url : undefined,
+      interval_sec: typeof body.interval_sec === "number" ? body.interval_sec : undefined,
     });
 
     return successResponse({
