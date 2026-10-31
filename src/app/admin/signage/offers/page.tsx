@@ -40,17 +40,70 @@ export default function OffersManagePage() {
   const [editTarget, setEditTarget] = useState<Promotion | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Promotion | null>(null);
 
-  // Fetch promotions from API — always update localStorage with server truth
+  // Fetch promotions from API — always preserve local image and update localStorage with server truth
   const loadPromotions = async () => {
     try {
       const res = await fetch("/api/signage/admin/promotions");
       if (res.ok) {
         const data = await res.json();
         if (data.promotions && data.promotions.length > 0) {
-          setPromotions(data.promotions);
+          // Merge with localStorage to guarantee images and newly created offers are NEVER lost on refresh
+          let cachedList: Promotion[] = [];
           try {
-            localStorage.setItem("kathua_signage_promotions", JSON.stringify(data.promotions));
+            const cached = localStorage.getItem("kathua_signage_promotions");
+            if (cached) cachedList = JSON.parse(cached);
           } catch {}
+
+          const serverIds = new Set(data.promotions.map((p: Promotion) => p.id));
+          // Keep all locally created promotions that haven't been confirmed by the server yet
+          const localOnly = cachedList.filter((c) => !serverIds.has(c.id));
+
+          const serverEnriched = data.promotions.map((p: Promotion) => {
+            const fromCache = cachedList.find((c) => c.id === p.id);
+            const hasRealImage =
+              p.media_id &&
+              p.media_id !== "/kathua-fresh-logo.jpg" &&
+              (p.media_id.startsWith("data:") || p.media_id.startsWith("http") || p.media_id.startsWith("/"));
+
+            if (!hasRealImage) {
+              if (fromCache?.media_id && fromCache.media_id !== "/kathua-fresh-logo.jpg") {
+                return {
+                  ...p,
+                  media_id: fromCache.media_id,
+                  media: fromCache.media || {
+                    id: fromCache.media_id,
+                    storage_path: fromCache.media_id,
+                    thumb_path: fromCache.media_id,
+                  },
+                };
+              }
+            }
+            return p;
+          });
+
+          const merged = [...localOnly, ...serverEnriched];
+          setPromotions(merged);
+          try {
+            localStorage.setItem("kathua_signage_promotions", JSON.stringify(merged));
+          } catch {}
+
+          // Background sync any local-only promotions to server so other devices get them
+          if (localOnly.length > 0) {
+            localOnly.forEach((lo) => {
+              fetch("/api/signage/admin/promotions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: lo.title,
+                  price_text: lo.price_text,
+                  media_id: lo.media_id,
+                  duration_sec: lo.duration_sec,
+                  status: lo.status,
+                  enabled: lo.enabled,
+                }),
+              }).catch(() => {});
+            });
+          }
         }
       }
     } catch {
@@ -75,6 +128,15 @@ export default function OffersManagePage() {
     setPromotions(nextList);
     try {
       localStorage.setItem("kathua_signage_promotions", JSON.stringify(nextList));
+    } catch {}
+
+    try {
+      const syncChannel = new BroadcastChannel("kathua_tv_sync");
+      syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+      syncChannel.close();
+    } catch {}
+    try {
+      localStorage.setItem("signage_force_refresh", Date.now().toString());
     } catch {}
 
     try {
@@ -105,6 +167,14 @@ export default function OffersManagePage() {
         return next;
       });
       setDeleteTarget(null);
+      try {
+        const syncChannel = new BroadcastChannel("kathua_tv_sync");
+        syncChannel.postMessage({ type: "TV_SYNC", timestamp: Date.now() });
+        syncChannel.close();
+      } catch {}
+      try {
+        localStorage.setItem("signage_force_refresh", Date.now().toString());
+      } catch {}
     } catch {
       // ignore
     }

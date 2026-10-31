@@ -273,7 +273,15 @@ export default function NewOfferModal({
 
       const promoData = await promoRes.json();
       const promotionId = promoData.promotion?.id || promoData.id || promoData.data?.id;
-      const createdPromo = promoData.promotion || promoData;
+      const createdPromo = {
+        ...(promoData.promotion || promoData),
+        media_id: finalMediaId || imageUrl,
+        media: {
+          id: finalMediaId || imageUrl,
+          storage_path: finalMediaId || imageUrl,
+          thumb_path: finalMediaId || imageUrl,
+        },
+      };
 
       // Update localStorage immediately so it's permanent across refreshes
       try {

@@ -46,10 +46,9 @@ export async function POST(request: Request) {
   const parsed = await parseBody(request, publishSchema);
   const note = parsed.data?.note || "Published offer updates";
 
-  // Always publish to devStore so local & Vercel state updates immediately
-  const nextVersion = devStore.publish();
+  devStore.load();
+  let nextVersion = devStore.publish();
 
-  // Also try updating Supabase if available
   const hasRealSupabaseKey =
     Boolean(process.env.SUPABASE_SECRET_KEY) &&
     !process.env.SUPABASE_SECRET_KEY?.includes("your-secret-key");
@@ -57,33 +56,66 @@ export async function POST(request: Request) {
   if (hasRealSupabaseKey) {
     try {
       const admin = createAdminClient();
-      const { data: playlist } = await admin
-        .from("signage_playlists")
-        .select("id")
-        .eq("is_default", true)
-        .single();
 
-      if (playlist) {
-        const { data: items } = await admin
-          .from("signage_playlist_items")
-          .select("*, promotion:signage_promotions(*, media:signage_media(*))")
-          .eq("playlist_id", playlist.id)
-          .eq("enabled", true)
-          .order("position");
+      // 1. Mark draft/scheduled promotions as live
+      await admin
+        .from("signage_promotions")
+        .update({ status: "live", enabled: true, updated_at: new Date().toISOString() })
+        .in("status", ["draft", "scheduled"]);
 
-        const livePromoIds = (items ?? [])
-          .filter((item) => item.promotion?.status === "draft" || item.promotion?.status === "scheduled")
-          .map((item) => item.promotion.id);
+      // 2. Fetch all active promotions from Supabase to enrich manifest
+      const { data: dbPromos } = await admin
+        .from("signage_promotions")
+        .select("*, media:signage_media(*)")
+        .is("deleted_at", null)
+        .eq("enabled", true);
 
-        if (livePromoIds.length > 0) {
-          await admin
-            .from("signage_promotions")
-            .update({ status: "live", updated_at: new Date().toISOString() })
-            .in("id", livePromoIds);
+      if (dbPromos && dbPromos.length > 0) {
+        for (const p of dbPromos) {
+          const img =
+            p.media?.storage_path ||
+            p.media?.thumb_path ||
+            (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
+            p.media_id;
+          if (img) {
+            devStore.updatePromotion(p.id, {
+              title: p.title,
+              price_text: p.price_text,
+              duration_sec: p.duration_sec,
+              status: "live",
+              enabled: true,
+              media_id: img,
+            });
+          }
         }
       }
+
+      // 3. Determine next version number from Supabase
+      const { data: lastVer } = await admin
+        .from("signage_publish_versions")
+        .select("version_no")
+        .order("version_no", { ascending: false })
+        .limit(1)
+        .single();
+
+      nextVersion = Math.max((lastVer?.version_no || 0) + 1, nextVersion);
+      devStore.version = nextVersion;
+      devStore.save();
+
+      // 4. Build complete manifest snapshot
+      const manifestSnapshot = devStore.getManifest();
+      manifestSnapshot.version = nextVersion;
+
+      // 5. Insert new version snapshot into Supabase signage_publish_versions
+      await admin.from("signage_publish_versions").insert({
+        version_no: nextVersion,
+        snapshot: manifestSnapshot,
+        note: note,
+        published_at: new Date().toISOString(),
+        published_by: auth.claims.sub,
+      });
     } catch (err) {
-      console.warn("Supabase publish sync warning:", err);
+      console.warn("Supabase publish snapshot warning:", err);
     }
   }
 

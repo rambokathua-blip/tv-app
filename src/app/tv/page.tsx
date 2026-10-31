@@ -318,13 +318,89 @@ export default function TvPlayerPage() {
     }
 
     const cachedManifest = localStorage.getItem("signage_cached_manifest");
+    let baseManifest: SignageManifest = FALLBACK_MANIFEST;
     if (cachedManifest) {
       try {
-        setManifest(JSON.parse(cachedManifest));
-      } catch {
-        // use fallback
-      }
+        baseManifest = JSON.parse(cachedManifest);
+      } catch {}
     }
+
+    try {
+      const rawPromos = localStorage.getItem("kathua_signage_promotions");
+      if (rawPromos) {
+        const localList = JSON.parse(rawPromos);
+        if (Array.isArray(localList) && localList.length > 0) {
+          const livePromos = localList.filter((p: any) => p.status === "live" && p.enabled !== false);
+          if (livePromos.length > 0) {
+            const localSlides: ManifestSlide[] = livePromos.map((p: any) => ({
+              id: p.id,
+              promotion_id: p.id,
+              title: p.title || "Offer",
+              price_text: p.price_text,
+              duration_sec: p.duration_sec || 10,
+              image_url:
+                (p.media_id && (p.media_id.startsWith("/") || p.media_id.startsWith("http") || p.media_id.startsWith("data:"))
+                  ? p.media_id
+                  : null) ||
+                p.media?.storage_path ||
+                p.media?.thumb_path ||
+                "/kathua-fresh-logo.jpg",
+            }));
+            const localIds = new Set(localSlides.map((s) => s.id));
+            const otherSlides = (baseManifest.slides || []).filter(
+              (s) => !localIds.has(s.id) && s.id !== "demo-onion" && s.id !== "demo-apple"
+            );
+            baseManifest = {
+              ...baseManifest,
+              slides: [...localSlides, ...otherSlides],
+            };
+          }
+        }
+      }
+    } catch {}
+
+    setManifest(baseManifest);
+  }, []);
+
+  // Helper to enrich manifest with custom uploaded offers from local storage
+  const enrichWithLocalPromotions = useCallback((manifestData: SignageManifest): SignageManifest => {
+    try {
+      if (typeof window === "undefined") return manifestData;
+      const raw = localStorage.getItem("kathua_signage_promotions");
+      if (raw) {
+        const localList = JSON.parse(raw);
+        if (Array.isArray(localList) && localList.length > 0) {
+          const livePromos = localList.filter((p: any) => p.status === "live" && p.enabled !== false);
+          if (livePromos.length > 0) {
+            const localSlides: ManifestSlide[] = livePromos.map((p: any) => ({
+              id: p.id,
+              promotion_id: p.id,
+              title: p.title || "Offer",
+              price_text: p.price_text,
+              duration_sec: p.duration_sec || 10,
+              image_url:
+                (p.media_id && (p.media_id.startsWith("/") || p.media_id.startsWith("http") || p.media_id.startsWith("data:"))
+                  ? p.media_id
+                  : null) ||
+                p.media?.storage_path ||
+                p.media?.thumb_path ||
+                "/kathua-fresh-logo.jpg",
+            }));
+
+            // Merge local custom slides with server slides (local custom takes top priority)
+            const localIds = new Set(localSlides.map((s) => s.id));
+            const otherSlides = (manifestData.slides || []).filter(
+              (s) => !localIds.has(s.id) && s.id !== "demo-onion" && s.id !== "demo-apple"
+            );
+            return {
+              ...manifestData,
+              slides: [...localSlides, ...otherSlides],
+            };
+          }
+        }
+      }
+    } catch {}
+    return manifestData;
   }, []);
 
   // Manifest Fetching (User Screen Display Mode — No Pairing Required)
@@ -335,15 +411,29 @@ export default function TvPlayerPage() {
 
       const res = await fetch("/api/signage/device/manifest", { headers });
       if (res.ok) {
-        const data = await res.json();
+        const rawData = await res.json();
+        const data = enrichWithLocalPromotions(rawData);
         setManifest(data);
         localStorage.setItem("signage_cached_manifest", JSON.stringify(data));
         setIsOffline(false);
+        setCurrentIndex(0);
+        setSlideProgress(0);
+        return;
       }
     } catch {
       setIsOffline(true);
     }
-  }, [token]);
+
+    // Fallback: check localStorage for cached manifest or local promotions
+    try {
+      const cached = localStorage.getItem("signage_cached_manifest");
+      const base = cached ? JSON.parse(cached) : FALLBACK_MANIFEST;
+      const enriched = enrichWithLocalPromotions(base);
+      setManifest(enriched);
+      setCurrentIndex(0);
+      setSlideProgress(0);
+    } catch {}
+  }, [token, enrichWithLocalPromotions]);
 
   // Initial load
   useEffect(() => {
