@@ -140,6 +140,93 @@ export async function PATCH(
         storage_path: customImg || data.media_id,
         thumb_path: customImg || data.media_id,
       };
+
+      // AUTO-SYNC: Update live publish version snapshot
+      try {
+        const { data: allActive } = await admin
+          .from("signage_promotions")
+          .select("*, media:signage_media(*)")
+          .neq("status", "archived")
+          .eq("enabled", true)
+          .order("created_at", { ascending: false });
+
+        const { data: lastVer } = await admin
+          .from("signage_publish_versions")
+          .select("version_no")
+          .order("version_no", { ascending: false })
+          .limit(1)
+          .single();
+
+        const nextVer = (lastVer?.version_no || 0) + 1;
+
+        const liveSlides = (allActive || []).map((p: any) => {
+          const meta = unpackPromotionNotes(p.notes);
+          const img =
+            (p.id === id && customImg ? customImg : null) ||
+            p.media?.storage_path ||
+            p.media?.thumb_path ||
+            meta.img ||
+            (p.notes?.startsWith("IMG:") ? p.notes.slice(4) : null) ||
+            p.media_id ||
+            "/kathua-fresh-logo.jpg";
+          return {
+            id: p.id,
+            promotion_id: p.id,
+            title: p.title || "Offer",
+            price_text: p.price_text,
+            mrp: (p.id === id ? parsed.data.mrp : null) || meta.mrp || p.mrp || null,
+            duration_sec: p.duration_sec || 8,
+            image_url: img,
+          };
+        });
+
+        const { data: dbQrs } = await admin
+          .from("signage_qr_codes")
+          .select("*")
+          .eq("enabled", true)
+          .order("position");
+
+        const newSnapshot = {
+          version: nextVer,
+          published_at: new Date().toISOString(),
+          branding: {
+            logo_url: "/kathua-fresh-logo.jpg",
+            website_text: "www.kathuafresh.in",
+            tagline: "Quality Assured | Always Fresh",
+            ticker_text:
+              "Welcome to Kathua Fresh • Farm Fresh Fruits & Vegetables Daily • 100% Quality Guaranteed",
+            ticker_enabled: true,
+            layout_profile: "standard",
+          },
+          qr_codes: (dbQrs || []).map((q: any) => ({
+            id: q.id,
+            label: q.label,
+            target_url: q.target_url,
+            caption: q.caption,
+          })),
+          slides: liveSlides,
+          audio: {
+            enabled: devStore.audioSettings?.enabled ?? true,
+            url: devStore.audioSettings?.url ?? "/store-audio.mp3",
+            volume: (devStore.audioSettings?.volume ?? 80) / 100,
+            loop: devStore.audioSettings?.loop ?? true,
+            interval_sec: devStore.audioSettings?.interval_sec ?? 120,
+          },
+        };
+
+        await admin.from("signage_publish_versions").insert({
+          version_no: nextVer,
+          snapshot: newSnapshot,
+          note: `Auto-published on update: ${parsed.data.title || data.title}`,
+          published_at: new Date().toISOString(),
+          published_by: auth.claims.sub,
+        });
+
+        devStore.version = nextVer;
+      } catch (autoErr) {
+        console.warn("Auto-publish on update warning:", autoErr);
+      }
+
       return successResponse(data);
     }
   } catch {
