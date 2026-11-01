@@ -198,6 +198,35 @@ export default function VoiceAnnouncementsPage() {
     }
 
     setIsBroadcasting(true);
+    const annId = "ann-" + Date.now();
+
+    // 1. Instant 0ms Local Broadcast for same-device / browser tabs
+    try {
+      const syncChannel = new BroadcastChannel("kathua_tv_sync");
+      syncChannel.postMessage({
+        type: "LIVE_BROADCAST",
+        announcement: {
+          id: annId,
+          text,
+          lang,
+          created_at: new Date().toISOString(),
+        },
+      });
+      syncChannel.close();
+    } catch {}
+
+    try {
+      localStorage.setItem(
+        "kathua_live_broadcast",
+        JSON.stringify({
+          id: annId,
+          text,
+          lang,
+          timestamp: Date.now(),
+        })
+      );
+    } catch {}
+
     try {
       const res = await fetch("/api/signage/admin/voice/broadcast", {
         method: "POST",

@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     }
 
     const broadcast = devStore.broadcastAnnouncement(text, lang);
+    // In-memory cache for ultra-fast, zero-lag delivery via version poller
+    (globalThis as any).__latestBroadcast = broadcast;
 
     // Cross-device sync: Push active announcement to Supabase cloud snapshot
     try {
