@@ -15,6 +15,8 @@ import {
   VolumeX,
   Tv,
   Sparkles,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import type { SignageManifest, ManifestSlide } from "@/lib/signage/types";
 
@@ -120,6 +122,7 @@ export default function TvPlayerPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const menuScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [windowScale, setWindowScale] = useState(1);
 
   const goToSlideRef = useRef<((idx: number) => void) | null>(null);
@@ -1008,20 +1011,137 @@ export default function TvPlayerPage() {
     []
   );
 
-  // Keyboard shortcut for TV testing or remote controls: Space = Pause, Right = Next, Left = Prev
+  // Helper to programmatically scroll the TV 3-dot drawer
+  const scrollMenu = useCallback((delta: number) => {
+    if (menuScrollContainerRef.current) {
+      menuScrollContainerRef.current.scrollBy({ top: delta, behavior: "smooth" });
+    }
+  }, []);
+
+  // TV Remote D-Pad Navigation inside the Quick Menu Drawer
+  const navigateDrawerFocus = useCallback((delta: number) => {
+    const drawer = document.getElementById("tv-quick-menu-drawer");
+    if (!drawer) return;
+    const focusables = Array.from(
+      drawer.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href]:not([disabled]), [tabindex="0"]:not([disabled])'
+      )
+    ).filter((el) => {
+      const style = window.getComputedStyle(el);
+      return style.display !== "none" && style.visibility !== "hidden" && el.offsetParent !== null;
+    });
+
+    if (focusables.length === 0) return;
+
+    const activeIdx = focusables.findIndex((el) => el === document.activeElement);
+    let nextIdx = 0;
+    if (activeIdx !== -1) {
+      nextIdx = (activeIdx + delta + focusables.length) % focusables.length;
+    } else {
+      nextIdx = delta > 0 ? 0 : focusables.length - 1;
+    }
+
+    const target = focusables[nextIdx];
+    if (target) {
+      target.focus();
+      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, []);
+
+  // Automatically focus first item when Quick Menu opens so TV cursor is visible
+  useEffect(() => {
+    if (showQuickMenu) {
+      const timer = setTimeout(() => {
+        const drawer = document.getElementById("tv-quick-menu-drawer");
+        if (drawer) {
+          const firstFocusable = drawer.querySelector<HTMLElement>(
+            'button:not([disabled]), a[href]:not([disabled]), [tabindex="0"]'
+          );
+          firstFocusable?.focus();
+        }
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [showQuickMenu]);
+
+  // Comprehensive TV Remote Control (D-Pad) and Keyboard navigation handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
+      const code = e.code;
+      const key = e.key;
+      const keyCode = e.keyCode;
+
+      // 1. Handle Quick Menu D-pad navigation when open
+      if (showQuickMenu) {
+        if (key === "Escape" || key === "Back" || keyCode === 27 || keyCode === 4) {
+          e.preventDefault();
+          setShowQuickMenu(false);
+          setTimeout(() => {
+            document.getElementById("tv-three-dots-btn")?.focus();
+          }, 60);
+          return;
+        }
+        if (key === "ArrowDown" || keyCode === 40 || keyCode === 20) {
+          e.preventDefault();
+          navigateDrawerFocus(1);
+          return;
+        }
+        if (key === "ArrowUp" || keyCode === 38 || keyCode === 19) {
+          e.preventDefault();
+          navigateDrawerFocus(-1);
+          return;
+        }
+        // Prevent background slide transitions while inside menu
+        if (key === "ArrowRight" || key === "ArrowLeft" || code === "Space") {
+          return;
+        }
+      }
+
+      // 2. Handle Dialog Modals
+      if (showConnectModal) {
+        if (key === "Escape" || key === "Back" || keyCode === 27 || keyCode === 4) {
+          e.preventDefault();
+          setShowConnectModal(false);
+          return;
+        }
+      }
+      if (showCustomIntervalModal) {
+        if (key === "Escape" || key === "Back" || keyCode === 27 || keyCode === 4) {
+          e.preventDefault();
+          setShowCustomIntervalModal(false);
+          return;
+        }
+      }
+
+      // 3. Quick menu open via Remote Menu key or M key
+      if (key === "Menu" || key === "ContextMenu" || keyCode === 82 || code === "KeyM") {
+        e.preventDefault();
+        setShowQuickMenu((prev) => !prev);
+        return;
+      }
+
+      // 4. Remote ArrowUp on main TV screen: focus the 3-dots button
+      if (key === "ArrowUp" || keyCode === 38 || keyCode === 19) {
+        const threeDotsBtn = document.getElementById("tv-three-dots-btn");
+        if (threeDotsBtn && document.activeElement !== threeDotsBtn) {
+          e.preventDefault();
+          threeDotsBtn.focus();
+          return;
+        }
+      }
+
+      // 5. Standard Playback Controls
+      if (code === "Space") {
         setIsPaused((p) => !p);
-      } else if (e.code === "ArrowRight") {
+      } else if (key === "ArrowRight" || code === "ArrowRight" || keyCode === 39 || keyCode === 22) {
         goToSlide(currentIndex + 1);
-      } else if (e.code === "ArrowLeft") {
+      } else if (key === "ArrowLeft" || code === "ArrowLeft" || keyCode === 37 || keyCode === 21) {
         goToSlide(currentIndex - 1);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, goToSlide]);
+  }, [currentIndex, goToSlide, showQuickMenu, showConnectModal, showCustomIntervalModal, navigateDrawerFocus]);
 
   // Active Slideshow Rendering
   const safeCurrentIndex = slides.length > 0 ? currentIndex % slides.length : 0;
@@ -2589,24 +2709,98 @@ export default function TvPlayerPage() {
                 overscroll-behavior-y: contain;
               }
               .tv-menu-scrollbar::-webkit-scrollbar {
-                width: 8px;
+                width: 12px;
                 display: block !important;
               }
               .tv-menu-scrollbar::-webkit-scrollbar-track {
-                background: rgba(15, 23, 42, 0.85);
+                background: rgba(15, 23, 42, 0.95);
                 border-radius: 10px;
-                margin: 6px 0;
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                margin: 4px 0;
+                border: 1px solid rgba(34, 197, 94, 0.25);
               }
               .tv-menu-scrollbar::-webkit-scrollbar-thumb {
-                background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+                background: linear-gradient(180deg, #4ade80 0%, #22c55e 50%, #16a34a 100%);
                 border-radius: 10px;
                 border: 2px solid rgba(10, 18, 30, 0.98);
-                box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+                box-shadow: 0 0 14px rgba(34, 197, 94, 0.7);
               }
-              .tv-menu-scrollbar::-webkit-scrollbar-thumb:hover {
-                background: #4ade80;
-                box-shadow: 0 0 14px rgba(74, 222, 128, 0.8);
+              .tv-menu-scrollbar::-webkit-scrollbar-thumb:hover,
+              .tv-menu-scrollbar::-webkit-scrollbar-thumb:active {
+                background: #86efac;
+                box-shadow: 0 0 20px rgba(134, 239, 172, 1);
+              }
+
+              /* High-Visibility TV Remote Cursor & Focus Styling */
+              .tv-focusable {
+                outline: none !important;
+                transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+                position: relative !important;
+              }
+              .tv-focusable:focus,
+              .tv-focusable:focus-visible {
+                outline: none !important;
+                border-color: #22c55e !important;
+                background-color: rgba(34, 197, 94, 0.24) !important;
+                box-shadow: 0 0 0 3px #22c55e, 0 0 28px rgba(34, 197, 94, 0.95), inset 0 0 12px rgba(34, 197, 94, 0.3) !important;
+                transform: scale(1.025) !important;
+                z-index: 20 !important;
+              }
+              .tv-cursor-badge {
+                display: none;
+              }
+              .tv-focusable:focus .tv-cursor-badge,
+              .tv-focusable:focus-visible .tv-cursor-badge {
+                display: inline-flex !important;
+                align-items: center;
+                gap: 4px;
+                font-size: 10px;
+                font-weight: 900;
+                letter-spacing: 0.04em;
+                background: #22c55e;
+                color: #022c22;
+                padding: 2px 8px;
+                border-radius: 9999px;
+                box-shadow: 0 0 12px rgba(34, 197, 94, 0.95);
+                animation: tvBadgePulse 1s infinite alternate;
+              }
+              #tv-three-dots-btn:focus,
+              #tv-three-dots-btn:focus-visible {
+                outline: none !important;
+                border: 3px solid #22c55e !important;
+                background-color: #15803d !important;
+                color: #ffffff !important;
+                box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.6), 0 0 35px #22c55e, 0 8px 30px rgba(0, 0, 0, 0.9) !important;
+                transform: scale(1.2) !important;
+                animation: tvPulseFocus 1.5s infinite ease-in-out;
+              }
+              .tv-three-dots-hint {
+                display: none;
+                position: absolute;
+                right: 56px;
+                top: 8px;
+                white-space: nowrap;
+                background: rgba(15, 23, 42, 0.95);
+                border: 2px solid #22c55e;
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
+                color: #86efac;
+                font-size: 12px;
+                font-weight: 800;
+                padding: 6px 12px;
+                border-radius: 8px;
+                pointer-events: none;
+                z-index: 10001;
+              }
+              #tv-three-dots-btn:focus + .tv-three-dots-hint,
+              #tv-three-dots-btn:focus-visible + .tv-three-dots-hint {
+                display: block;
+              }
+              @keyframes tvBadgePulse {
+                0% { transform: scale(0.96); opacity: 0.85; }
+                100% { transform: scale(1.06); opacity: 1; }
+              }
+              @keyframes tvPulseFocus {
+                0%, 100% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.6), 0 0 30px #22c55e; }
+                50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.9), 0 0 45px #4ade80; }
               }
             `}</style>
             <div
@@ -2752,6 +2946,8 @@ export default function TvPlayerPage() {
         }}
       >
         <button
+          id="tv-three-dots-btn"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
             setShowQuickMenu(!showQuickMenu);
@@ -2776,658 +2972,796 @@ export default function TvPlayerPage() {
         >
           {showQuickMenu ? <X size={22} /> : <MoreVertical size={22} />}
         </button>
+        <span className="tv-three-dots-hint">Press [OK] for TV Settings</span>
+      </div>
 
-        {/* 3-Dot Menu Slider Drawer from Right */}
-        {showQuickMenu && (
-          <>
-            {/* Darkened Backdrop for outside-click close */}
-            <div
-              onClick={() => setShowQuickMenu(false)}
-              style={{
-                position: "fixed",
-                inset: 0,
-                backgroundColor: "rgba(0, 0, 0, 0.65)",
-                backdropFilter: "blur(8px)",
-                zIndex: 99998,
-                animation: "fadeIn 0.2s ease-out",
-              }}
-            />
+      {/* 3-Dot Menu Slider Drawer from Right */}
+      {showQuickMenu && (
+        <>
+          {/* Darkened Backdrop for outside-click close */}
+          <div
+            onClick={() => setShowQuickMenu(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.65)",
+              backdropFilter: "blur(8px)",
+              zIndex: 99998,
+              animation: "fadeIn 0.2s ease-out",
+            }}
+          />
 
-            {/* Slide-out Drawer Panel with Scrollable List and Custom Green Slider */}
+          {/* Slide-out Drawer Panel with Scrollable List and Custom Green Slider */}
+          <div
+            id="tv-quick-menu-drawer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 440,
+              maxWidth: "92vw",
+              backgroundColor: "rgba(10, 18, 30, 0.98)",
+              borderLeft: "2px solid rgba(34, 197, 94, 0.4)",
+              boxShadow: "-25px 0 70px rgba(0, 0, 0, 0.95), 0 0 40px rgba(34, 197, 94, 0.25)",
+              backdropFilter: "blur(30px)",
+              display: "flex",
+              flexDirection: "column",
+              color: "#fff",
+              fontFamily: "system-ui, -apple-system, sans-serif",
+              zIndex: 99999,
+              overflow: "hidden",
+              animation: "slideGlideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            {/* Pinned Drawer Header */}
             <div
-              onClick={(e) => e.stopPropagation()}
               style={{
-                position: "fixed",
-                top: 0,
-                right: 0,
-                bottom: 0,
-                width: 420,
-                maxWidth: "92vw",
-                backgroundColor: "rgba(10, 18, 30, 0.98)",
-                borderLeft: "2px solid rgba(34, 197, 94, 0.4)",
-                boxShadow: "-25px 0 70px rgba(0, 0, 0, 0.95), 0 0 40px rgba(34, 197, 94, 0.25)",
-                backdropFilter: "blur(30px)",
                 display: "flex",
-                flexDirection: "column",
-                color: "#fff",
-                fontFamily: "system-ui, -apple-system, sans-serif",
-                zIndex: 99999,
-                overflow: "hidden",
-                animation: "slideGlideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "16px 20px 12px",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
+                backgroundColor: "rgba(15, 23, 42, 0.95)",
+                flexShrink: 0,
               }}
             >
-              {/* Pinned Drawer Header */}
+              <div>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 900,
+                    color: "#ffffff",
+                    letterSpacing: "0.03em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Kathua Fresh TV Hub
+                </div>
+                <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, marginTop: 2 }}>
+                  Live TV Controller & Quick Settings
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    padding: "3px 10px",
+                    borderRadius: 14,
+                    backgroundColor: "rgba(34, 197, 94, 0.2)",
+                    color: "#4ade80",
+                    fontWeight: 800,
+                    border: "1px solid rgba(34, 197, 94, 0.4)",
+                  }}
+                >
+                  {token ? "PAIRED" : "LIVE"}
+                </span>
+                <button
+                  id="tv-close-menu-btn"
+                  tabIndex={0}
+                  className="tv-focusable"
+                  onClick={() => setShowQuickMenu(false)}
+                  aria-label="Close TV Menu"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(255, 255, 255, 0.1)",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 16,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* TV Remote Guidance Banner */}
+            <div
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "rgba(34, 197, 94, 0.12)",
+                borderBottom: "1px solid rgba(34, 197, 94, 0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                fontSize: 11,
+                color: "#86efac",
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              <span>🎮 Remote D-Pad: ▲ ▼ move/scroll • [OK] select</span>
+              <span style={{ fontSize: 10, opacity: 0.85 }}>Back/ESC: Close</span>
+            </div>
+
+            {/* Helper Scroll Up Button */}
+            <div style={{ padding: "8px 16px 0 18px", flexShrink: 0 }}>
+              <button
+                type="button"
+                tabIndex={0}
+                className="tv-focusable"
+                onClick={() => scrollMenu(-220)}
+                style={{
+                  width: "100%",
+                  padding: "6px 12px",
+                  borderRadius: 12,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  color: "#86efac",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <ChevronUp size={15} />
+                <span>▲ Scroll Up</span>
+                <span className="tv-cursor-badge">▶ ACTIVE</span>
+              </button>
+            </div>
+
+            {/* Fully Scrollable Options Body with Custom Green Slider (Scrollbar) */}
+            <div
+              ref={menuScrollContainerRef}
+              id="tv-menu-scrollable-body"
+              className="tv-menu-scrollbar"
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                overflowX: "hidden",
+                padding: "12px 16px 20px 18px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                WebkitOverflowScrolling: "touch",
+                overscrollBehaviorY: "contain",
+              }}
+            >
+              {/* 1. TV Background Audio Toggle */}
               <div
                 style={{
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "18px 20px 14px",
-                  borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
-                  backgroundColor: "rgba(15, 23, 42, 0.95)",
-                  flexShrink: 0,
                 }}
               >
-                <div>
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 900,
-                      color: "#ffffff",
-                      letterSpacing: "0.03em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Kathua Fresh TV Hub
-                  </div>
-                  <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, marginTop: 2 }}>
-                    Live TV Controller & Quick Settings
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {isAudioMuted ? (
+                    <VolumeX size={18} style={{ color: "#f87171" }} />
+                  ) : (
+                    <Volume2 size={18} style={{ color: "#4ade80" }} />
+                  )}
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
+                      Store TV Audio
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.6)" }}>
+                      {isAudioMuted ? "Background voice currently muted" : "Playing promotional audio"}
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      padding: "3px 10px",
-                      borderRadius: 14,
-                      backgroundColor: "rgba(34, 197, 94, 0.2)",
-                      color: "#4ade80",
-                      fontWeight: 800,
-                      border: "1px solid rgba(34, 197, 94, 0.4)",
-                    }}
-                  >
-                    {token ? "PAIRED" : "LIVE"}
+                <button
+                  tabIndex={0}
+                  className="tv-focusable"
+                  onClick={() => toggleTvAudio()}
+                  onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 14,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    backgroundColor: !isAudioMuted ? "#22c55e" : "rgba(239, 68, 68, 0.25)",
+                    border: `1px solid ${!isAudioMuted ? "#22c55e" : "#ef4444"}`,
+                    color: !isAudioMuted ? "#022c22" : "#ffffff",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span>{!isAudioMuted ? "AUDIO ON" : "MUTED"}</span>
+                  <span className="tv-cursor-badge">▶ OK</span>
+                </button>
+              </div>
+
+              {/* 2. Sound Gap Trigger Duration */}
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
+                    ⏱️ Voice Trigger Gap
                   </span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#86efac" }}>
+                    {audioIntervalSec === 0
+                      ? "Continuous Loop"
+                      : audioIntervalSec >= 60
+                      ? `${audioIntervalSec / 60} min`
+                      : `${audioIntervalSec} sec`}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                  {[
+                    { label: "Loop (0s)", sec: 0 },
+                    { label: "30s", sec: 30 },
+                    { label: "1 min", sec: 60 },
+                    { label: "2 min", sec: 120 },
+                    { label: "3 min", sec: 180 },
+                    { label: "5 min", sec: 300 },
+                  ].map((item) => {
+                    const isSelected = audioIntervalSec === item.sec;
+                    return (
+                      <button
+                        key={item.sec}
+                        tabIndex={0}
+                        className="tv-focusable"
+                        onClick={() => changeAudioInterval(item.sec)}
+                        onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                        style={{
+                          padding: "6px 4px",
+                          borderRadius: 10,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          backgroundColor: isSelected ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
+                          border: `1px solid ${isSelected ? "#22c55e" : "rgba(255,255,255,0.1)"}`,
+                          color: isSelected ? "#4ade80" : "rgba(255,255,255,0.75)",
+                          cursor: "pointer",
+                          textAlign: "center",
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
                   <button
-                    onClick={() => setShowQuickMenu(false)}
+                    tabIndex={0}
+                    className="tv-focusable"
+                    onClick={() => {
+                      setShowQuickMenu(false);
+                      setShowCustomIntervalModal(true);
+                    }}
+                    onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: "50%",
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
-                      border: "none",
-                      color: "#fff",
+                      gridColumn: "span 3",
+                      padding: "7px 10px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: "rgba(34, 197, 94, 0.15)",
+                      border: "1px dashed #22c55e",
+                      color: "#86efac",
                       cursor: "pointer",
+                      textAlign: "center",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: 16,
+                      gap: 6,
                     }}
                   >
-                    ✕
+                    <span>⏱️ Set Custom Seconds / Minutes...</span>
+                    <span className="tv-cursor-badge">▶ OK</span>
                   </button>
                 </div>
               </div>
 
-              {/* Fully Scrollable Options Body with Custom Green Slider (Scrollbar) */}
+              {/* 3. TV Layout Profile Toggle (Standard vs Immersive) */}
               <div
-                className="tv-menu-scrollbar"
                 style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  overflowX: "hidden",
-                  padding: "16px 16px 20px 18px",
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: 12,
-                  WebkitOverflowScrolling: "touch",
-                  overscrollBehaviorY: "contain",
+                  gap: 8,
                 }}
               >
-                {/* 1. TV Background Audio Toggle (Volume slider removed, clean mute/unmute button) */}
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {isAudioMuted ? (
-                      <VolumeX size={18} style={{ color: "#f87171" }} />
-                    ) : (
-                      <Volume2 size={18} style={{ color: "#4ade80" }} />
-                    )}
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
-                        Store TV Audio
-                      </div>
-                      <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.6)" }}>
-                        {isAudioMuted ? "Background voice currently muted" : "Playing promotional audio"}
-                      </div>
-                    </div>
-                  </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
+                    📺 TV Screen Layout
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase" }}>
+                    {isImmersive ? "Immersive (16:9)" : "Standard Split"}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <button
-                    onClick={() => toggleTvAudio()}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 14,
-                      fontSize: 11,
-                      fontWeight: 900,
-                      backgroundColor: !isAudioMuted ? "#22c55e" : "rgba(239, 68, 68, 0.25)",
-                      border: `1px solid ${!isAudioMuted ? "#22c55e" : "#ef4444"}`,
-                      color: !isAudioMuted ? "#022c22" : "#ffffff",
-                      cursor: "pointer",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {!isAudioMuted ? "AUDIO ON" : "MUTED"}
-                  </button>
-                </div>
-
-                {/* 2. Sound Gap Trigger Duration */}
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
-                      ⏱️ Voice Trigger Gap
-                    </span>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: "#86efac" }}>
-                      {audioIntervalSec === 0
-                        ? "Continuous Loop"
-                        : audioIntervalSec >= 60
-                        ? `${audioIntervalSec / 60} min`
-                        : `${audioIntervalSec} sec`}
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                    {[
-                      { label: "Loop (0s)", sec: 0 },
-                      { label: "30s", sec: 30 },
-                      { label: "1 min", sec: 60 },
-                      { label: "2 min", sec: 120 },
-                      { label: "3 min", sec: 180 },
-                      { label: "5 min", sec: 300 },
-                    ].map((item) => {
-                      const isSelected = audioIntervalSec === item.sec;
-                      return (
-                        <button
-                          key={item.sec}
-                          onClick={() => changeAudioInterval(item.sec)}
-                          style={{
-                            padding: "6px 4px",
-                            borderRadius: 10,
-                            fontSize: 10,
-                            fontWeight: 800,
-                            backgroundColor: isSelected ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${isSelected ? "#22c55e" : "rgba(255,255,255,0.1)"}`,
-                            color: isSelected ? "#4ade80" : "rgba(255,255,255,0.75)",
-                            cursor: "pointer",
-                            textAlign: "center",
-                          }}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                    <button
-                      onClick={() => {
-                        setShowQuickMenu(false);
-                        setShowCustomIntervalModal(true);
-                      }}
-                      style={{
-                        gridColumn: "span 3",
-                        padding: "7px 10px",
-                        borderRadius: 10,
-                        fontSize: 11,
-                        fontWeight: 800,
-                        backgroundColor: "rgba(34, 197, 94, 0.15)",
-                        border: "1px dashed #22c55e",
-                        color: "#86efac",
-                        cursor: "pointer",
-                        textAlign: "center",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 6,
-                      }}
-                    >
-                      <span>⏱️</span>
-                      <span>Set Custom Seconds / Minutes...</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 3. TV Layout Profile Toggle (Standard vs Immersive) */}
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
-                      📺 TV Screen Layout
-                    </span>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase" }}>
-                      {isImmersive ? "Immersive (16:9)" : "Standard Split"}
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <button
-                      onClick={() => {
-                        const updated = {
-                          ...manifest,
-                          branding: {
-                            ...manifest.branding,
-                            layout_profile: "standard" as const,
-                          },
-                        };
-                        setManifest(updated);
-                        fetch("/api/signage/admin/branding", {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ layout_profile: "standard" }),
-                        }).catch(() => {});
-                      }}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        fontSize: 11,
-                        fontWeight: 800,
-                        backgroundColor: !isImmersive ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
-                        border: !isImmersive ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.1)",
-                        color: !isImmersive ? "#86efac" : "rgba(255,255,255,0.6)",
-                        cursor: "pointer",
-                        textAlign: "center",
-                      }}
-                    >
-                      Standard (Split TV)
-                    </button>
-                    <button
-                      onClick={() => {
-                        const updated = {
-                          ...manifest,
-                          branding: {
-                            ...manifest.branding,
-                            layout_profile: "immersive" as const,
-                          },
-                        };
-                        setManifest(updated);
-                        fetch("/api/signage/admin/branding", {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ layout_profile: "immersive" }),
-                        }).catch(() => {});
-                      }}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        fontSize: 11,
-                        fontWeight: 800,
-                        backgroundColor: isImmersive ? "rgba(56, 189, 248, 0.25)" : "rgba(255,255,255,0.05)",
-                        border: isImmersive ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
-                        color: isImmersive ? "#7dd3fc" : "rgba(255,255,255,0.6)",
-                        cursor: "pointer",
-                        textAlign: "center",
-                      }}
-                    >
-                      Immersive (Full 16:9)
-                    </button>
-                  </div>
-                </div>
-
-                {/* 4. Slide Transition Effect */}
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
-                      ✨ Slide Animation
-                    </span>
-                    <span style={{ fontSize: 10, color: "#facc15", fontWeight: 800, textTransform: "uppercase" }}>
-                      {transitionStyle === "cinematic" ? "Cinematic Fade" : "Smooth Slide"}
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                    <button
-                      onClick={() => {
-                        setTransitionStyle("cinematic");
-                        localStorage.setItem("tv_transition_style", "cinematic");
-                      }}
-                      style={{
-                        padding: "7px 10px",
-                        borderRadius: 10,
-                        fontSize: 11,
-                        fontWeight: 800,
-                        backgroundColor: transitionStyle === "cinematic" ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
-                        border: transitionStyle === "cinematic" ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.1)",
-                        color: transitionStyle === "cinematic" ? "#86efac" : "rgba(255,255,255,0.6)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ✨ Smooth Fade
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTransitionStyle("slide");
-                        localStorage.setItem("tv_transition_style", "slide");
-                      }}
-                      style={{
-                        padding: "7px 10px",
-                        borderRadius: 10,
-                        fontSize: 11,
-                        fontWeight: 800,
-                        backgroundColor: transitionStyle === "slide" ? "rgba(56, 189, 248, 0.25)" : "rgba(255,255,255,0.05)",
-                        border: transitionStyle === "slide" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
-                        color: transitionStyle === "slide" ? "#7dd3fc" : "rgba(255,255,255,0.6)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ➡️ Glide Slide
-                    </button>
-                  </div>
-                </div>
-
-                {/* 5. Action: Open Admin Mode */}
-                <button
-                  onClick={() => {
-                    setShowQuickMenu(false);
-                    if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
-                      (window as any).AndroidSignage.switchMode("admin");
-                    } else {
-                      window.location.href = "/admin/signage";
-                    }
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(34, 197, 94, 0.16)",
-                    border: "1px solid rgba(34, 197, 94, 0.4)",
-                    color: "#86efac",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                >
-                  <Smartphone size={20} style={{ flexShrink: 0, color: "#4ade80" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#ffffff" }}>
-                      Open Admin Mode (Upload Offers)
-                    </div>
-                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
-                      Add new products & prices on mobile/TV
-                    </div>
-                  </div>
-                </button>
-
-                {/* 6. Action: Refresh & Sync */}
-                <button
-                  disabled={isSyncing}
-                  onClick={async () => {
-                    setIsSyncing(true);
-                    try {
-                      await fetchManifest();
-                      setSyncToast("TV Display Synced!");
-                      setTimeout(() => setSyncToast(null), 3000);
-                    } catch {
-                      window.location.reload();
-                    } finally {
-                      setIsSyncing(false);
-                      setShowQuickMenu(false);
-                    }
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(56, 189, 248, 0.16)",
-                    border: "1px solid rgba(56, 189, 248, 0.4)",
-                    color: "#38bdf8",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                >
-                  <RefreshCw size={20} style={{ flexShrink: 0, color: "#38bdf8" }} className={isSyncing ? "animate-spin" : ""} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#ffffff" }}>
-                      {isSyncing ? "Syncing..." : "Refresh Products & Offers"}
-                    </div>
-                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
-                      Fetch latest products & updated prices
-                    </div>
-                  </div>
-                </button>
-
-                {/* 7. Action: Toggle Fullscreen */}
-                <button
-                  onClick={() => {
-                    toggleFullScreen();
-                    setShowQuickMenu(false);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    color: "#ffffff",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                >
-                  <Maximize2 size={18} style={{ flexShrink: 0, color: "#facc15" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>Toggle Fullscreen Mode</div>
-                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
-                      Fill entire TV or mobile display
-                    </div>
-                  </div>
-                </button>
-
-                {/* 8. Action: Connect Phone */}
-                <button
-                  onClick={() => {
-                    setShowQuickMenu(false);
-                    setShowConnectModal(true);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    color: "#ffffff",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                >
-                  <Tv size={18} style={{ flexShrink: 0, color: "#a78bfa" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>Connect Phone / Remote</div>
-                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
-                      Scan QR code with phone to control TV
-                    </div>
-                  </div>
-                </button>
-
-                {/* 9. Action: Manage TV Devices */}
-                <a
-                  href="/admin/signage/more/devices"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    color: "#ffffff",
-                    textDecoration: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  <ShieldCheck size={18} style={{ flexShrink: 0, color: "#38bdf8" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>Manage TV Devices</div>
-                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
-                      View paired screens & health status
-                    </div>
-                  </div>
-                  <ExternalLink size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
-                </a>
-
-                {/* 10. Action: Switch to 100% Live Mode (Hide Preview Banner) */}
-                {isPreview && (
-                  <button
+                    tabIndex={0}
+                    className="tv-focusable"
+                    onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
                     onClick={() => {
-                      const liveToken = "live-screen-" + Date.now();
-                      localStorage.setItem("signage_device_token", liveToken);
-                      setToken(liveToken);
-                      setIsPreview(false);
-                      setHidePreviewBanner(true);
-                      const cleanUrl = window.location.pathname;
-                      window.history.replaceState({}, document.title, cleanUrl);
-                      setShowQuickMenu(false);
-                      setSyncToast("Switched to 100% Live TV Mode!");
-                      setTimeout(() => setSyncToast(null), 3000);
+                      const updated = {
+                        ...manifest,
+                        branding: {
+                          ...manifest.branding,
+                          layout_profile: "standard" as const,
+                        },
+                      };
+                      setManifest(updated);
+                      fetch("/api/signage/admin/branding", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ layout_profile: "standard" }),
+                      }).catch(() => {});
                     }}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 14px",
-                      borderRadius: 16,
-                      backgroundColor: "rgba(234, 88, 12, 0.16)",
-                      border: "1px solid rgba(234, 88, 12, 0.4)",
-                      color: "#fb923c",
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: !isImmersive ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: !isImmersive ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.1)",
+                      color: !isImmersive ? "#86efac" : "rgba(255,255,255,0.6)",
                       cursor: "pointer",
-                      textAlign: "left",
-                      width: "100%",
+                      textAlign: "center",
                     }}
                   >
-                    <Tv size={18} style={{ flexShrink: 0, color: "#f97316" }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
-                        Go 100% Live (Remove Banner)
-                      </div>
-                      <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
-                        Hide &quot;Preview Mode&quot; badge
-                      </div>
-                    </div>
+                    Standard (Split TV)
                   </button>
-                )}
-
-                {/* 11. Action: Reset TV Cache */}
-                <button
-                  onClick={() => {
-                    if (confirm("Reset TV Display cache?")) {
-                      localStorage.removeItem("signage_device_token");
-                      localStorage.removeItem("kathua_signage_promotions");
-                      setToken(null);
-                      setShowQuickMenu(false);
-                      window.location.reload();
-                    }
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    backgroundColor: "rgba(239, 68, 68, 0.12)",
-                    border: "1px solid rgba(239, 68, 68, 0.25)",
-                    color: "#fca5a5",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    width: "100%",
-                    marginTop: 4,
-                  }}
-                >
-                  <LogOut size={16} style={{ flexShrink: 0, color: "#ef4444" }} />
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444" }}>
-                      Reset Display Cache
-                    </div>
-                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
-                      Clear local tokens and reload fresh
-                    </div>
-                  </div>
-                </button>
+                  <button
+                    tabIndex={0}
+                    className="tv-focusable"
+                    onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                    onClick={() => {
+                      const updated = {
+                        ...manifest,
+                        branding: {
+                          ...manifest.branding,
+                          layout_profile: "immersive" as const,
+                        },
+                      };
+                      setManifest(updated);
+                      fetch("/api/signage/admin/branding", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ layout_profile: "immersive" }),
+                      }).catch(() => {});
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: isImmersive ? "rgba(56, 189, 248, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: isImmersive ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                      color: isImmersive ? "#7dd3fc" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    Immersive (Full 16:9)
+                  </button>
+                </div>
               </div>
 
-              {/* Pinned Bottom Footer with Scrolling Slider Guidance */}
+              {/* 4. Slide Transition Effect */}
               <div
                 style={{
-                  padding: "10px 18px",
-                  borderTop: "1px solid rgba(255, 255, 255, 0.1)",
-                  backgroundColor: "rgba(6, 11, 20, 0.95)",
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  fontSize: 11,
-                  color: "rgba(255, 255, 255, 0.55)",
-                  flexShrink: 0,
+                  flexDirection: "column",
+                  gap: 8,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: "#22c55e", fontWeight: 800 }}>↕</span>
-                  <span>Scroll slider up/down to view all controls</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
+                    ✨ Slide Animation
+                  </span>
+                  <span style={{ fontSize: 10, color: "#facc15", fontWeight: 800, textTransform: "uppercase" }}>
+                    {transitionStyle === "cinematic" ? "Cinematic Fade" : "Smooth Slide"}
+                  </span>
                 </div>
-                <span style={{ color: "#4ade80", fontWeight: 800 }}>Kathua Fresh</span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <button
+                    tabIndex={0}
+                    className="tv-focusable"
+                    onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                    onClick={() => {
+                      setTransitionStyle("cinematic");
+                      localStorage.setItem("tv_transition_style", "cinematic");
+                    }}
+                    style={{
+                      padding: "7px 10px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: transitionStyle === "cinematic" ? "rgba(34, 197, 94, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: transitionStyle === "cinematic" ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.1)",
+                      color: transitionStyle === "cinematic" ? "#86efac" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✨ Smooth Fade
+                  </button>
+                  <button
+                    tabIndex={0}
+                    className="tv-focusable"
+                    onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                    onClick={() => {
+                      setTransitionStyle("slide");
+                      localStorage.setItem("tv_transition_style", "slide");
+                    }}
+                    style={{
+                      padding: "7px 10px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      backgroundColor: transitionStyle === "slide" ? "rgba(56, 189, 248, 0.25)" : "rgba(255,255,255,0.05)",
+                      border: transitionStyle === "slide" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                      color: transitionStyle === "slide" ? "#7dd3fc" : "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ➡️ Glide Slide
+                  </button>
+                </div>
               </div>
+
+              {/* 5. Action: Open Admin Mode */}
+              <button
+                tabIndex={0}
+                className="tv-focusable"
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                onClick={() => {
+                  setShowQuickMenu(false);
+                  if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
+                    (window as any).AndroidSignage.switchMode("admin");
+                  } else {
+                    window.location.href = "/admin/signage";
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(34, 197, 94, 0.16)",
+                  border: "1px solid rgba(34, 197, 94, 0.4)",
+                  color: "#86efac",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <Smartphone size={20} style={{ flexShrink: 0, color: "#4ade80" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#ffffff" }}>
+                    Open Admin Mode (Upload Offers)
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
+                    Add new products & prices on mobile/TV
+                  </div>
+                </div>
+                <span className="tv-cursor-badge">▶ SELECT</span>
+              </button>
+
+              {/* 6. Action: Refresh & Sync */}
+              <button
+                tabIndex={0}
+                className="tv-focusable"
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                disabled={isSyncing}
+                onClick={async () => {
+                  setIsSyncing(true);
+                  try {
+                    await fetchManifest();
+                    setSyncToast("TV Display Synced!");
+                    setTimeout(() => setSyncToast(null), 3000);
+                  } catch {
+                    window.location.reload();
+                  } finally {
+                    setIsSyncing(false);
+                    setShowQuickMenu(false);
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(56, 189, 248, 0.16)",
+                  border: "1px solid rgba(56, 189, 248, 0.4)",
+                  color: "#38bdf8",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <RefreshCw size={20} style={{ flexShrink: 0, color: "#38bdf8" }} className={isSyncing ? "animate-spin" : ""} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#ffffff" }}>
+                    {isSyncing ? "Syncing..." : "Refresh Products & Offers"}
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
+                    Fetch latest products & updated prices
+                  </div>
+                </div>
+                <span className="tv-cursor-badge">▶ SELECT</span>
+              </button>
+
+              {/* 7. Action: Toggle Fullscreen */}
+              <button
+                tabIndex={0}
+                className="tv-focusable"
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                onClick={() => {
+                  toggleFullScreen();
+                  setShowQuickMenu(false);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <Maximize2 size={18} style={{ flexShrink: 0, color: "#facc15" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Toggle Fullscreen Mode</div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
+                    Fill entire TV or mobile display
+                  </div>
+                </div>
+                <span className="tv-cursor-badge">▶ SELECT</span>
+              </button>
+
+              {/* 8. Action: Connect Phone */}
+              <button
+                tabIndex={0}
+                className="tv-focusable"
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                onClick={() => {
+                  setShowQuickMenu(false);
+                  setShowConnectModal(true);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <Tv size={18} style={{ flexShrink: 0, color: "#a78bfa" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Connect Phone / Remote</div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
+                    Scan QR code with phone to control TV
+                  </div>
+                </div>
+                <span className="tv-cursor-badge">▶ SELECT</span>
+              </button>
+
+              {/* 9. Action: Manage TV Devices */}
+              <a
+                tabIndex={0}
+                className="tv-focusable"
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                href="/admin/signage/more/devices"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#ffffff",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <ShieldCheck size={18} style={{ flexShrink: 0, color: "#38bdf8" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Manage TV Devices</div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
+                    View paired screens & health status
+                  </div>
+                </div>
+                <ExternalLink size={14} style={{ color: "rgba(255,255,255,0.4)" }} />
+                <span className="tv-cursor-badge">▶ SELECT</span>
+              </a>
+
+              {/* 10. Action: Switch to 100% Live Mode (Hide Preview Banner) */}
+              {isPreview && (
+                <button
+                  tabIndex={0}
+                  className="tv-focusable"
+                  onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                  onClick={() => {
+                    const liveToken = "live-screen-" + Date.now();
+                    localStorage.setItem("signage_device_token", liveToken);
+                    setToken(liveToken);
+                    setIsPreview(false);
+                    setHidePreviewBanner(true);
+                    const cleanUrl = window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    setShowQuickMenu(false);
+                    setSyncToast("Switched to 100% Live TV Mode!");
+                    setTimeout(() => setSyncToast(null), 3000);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "12px 14px",
+                    borderRadius: 16,
+                    backgroundColor: "rgba(234, 88, 12, 0.16)",
+                    border: "1px solid rgba(234, 88, 12, 0.4)",
+                    color: "#fb923c",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                >
+                  <Tv size={18} style={{ flexShrink: 0, color: "#f97316" }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>
+                      Go 100% Live (Remove Banner)
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.65)" }}>
+                      Hide &quot;Preview Mode&quot; badge
+                    </div>
+                  </div>
+                  <span className="tv-cursor-badge">▶ SELECT</span>
+                </button>
+              )}
+
+              {/* 11. Action: Reset TV Cache */}
+              <button
+                tabIndex={0}
+                className="tv-focusable"
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                onClick={() => {
+                  if (confirm("Reset TV Display cache?")) {
+                    localStorage.removeItem("signage_device_token");
+                    localStorage.removeItem("kathua_signage_promotions");
+                    setToken(null);
+                    setShowQuickMenu(false);
+                    window.location.reload();
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 14px",
+                  borderRadius: 16,
+                  backgroundColor: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  color: "#fca5a5",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                  marginTop: 4,
+                }}
+              >
+                <LogOut size={16} style={{ flexShrink: 0, color: "#ef4444" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444" }}>
+                    Reset Display Cache
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.55)" }}>
+                    Clear local tokens and reload fresh
+                  </div>
+                </div>
+                <span className="tv-cursor-badge">▶ SELECT</span>
+              </button>
+
+              {/* Helper Scroll Down Button */}
+              <button
+                type="button"
+                tabIndex={0}
+                className="tv-focusable"
+                onClick={() => scrollMenu(220)}
+                onFocus={(e) => e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest" })}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 12,
+                  backgroundColor: "rgba(34, 197, 94, 0.15)",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  color: "#86efac",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  width: "100%",
+                  marginTop: 6,
+                }}
+              >
+                <ChevronDown size={15} />
+                <span>▼ Scroll Down for More Settings</span>
+                <span className="tv-cursor-badge">▶ ACTIVE</span>
+              </button>
             </div>
-          </>
-        )}
-      </div>
+
+            {/* Pinned Bottom Footer with Scrolling Guidance */}
+            <div
+              style={{
+                padding: "10px 18px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+                backgroundColor: "rgba(6, 11, 20, 0.95)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                fontSize: 11,
+                color: "rgba(255, 255, 255, 0.55)",
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "#22c55e", fontWeight: 800 }}>↕</span>
+                <span>Use Remote ▲ ▼ or Scroll buttons</span>
+              </div>
+              <span style={{ color: "#4ade80", fontWeight: 800 }}>Kathua Fresh</span>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ============================================================ */}
       {/* PHONE CONNECT / PAIRING POPUP MODAL                          */}
@@ -3465,6 +3799,8 @@ export default function TvPlayerPage() {
           >
             {/* Close Button */}
             <button
+              tabIndex={0}
+              className="tv-focusable"
               onClick={() => setShowConnectModal(false)}
               style={{
                 position: "absolute",
@@ -3474,7 +3810,7 @@ export default function TvPlayerPage() {
                 height: 40,
                 borderRadius: "50%",
                 backgroundColor: "rgba(255, 255, 255, 0.1)",
-                border: "none",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",
@@ -3532,6 +3868,8 @@ export default function TvPlayerPage() {
 
             <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
               <button
+                tabIndex={0}
+                className="tv-focusable"
                 onClick={() => {
                   setShowConnectModal(false);
                   if (typeof window !== "undefined" && (window as any).AndroidSignage?.switchMode) {
@@ -3558,6 +3896,8 @@ export default function TvPlayerPage() {
                 <span>Switch to Admin on this Device</span>
               </button>
               <button
+                tabIndex={0}
+                className="tv-focusable"
                 onClick={() => setShowConnectModal(false)}
                 style={{
                   padding: "12px 24px",
@@ -3623,10 +3963,12 @@ export default function TvPlayerPage() {
                 </div>
               </div>
               <button
+                tabIndex={0}
+                className="tv-focusable"
                 onClick={() => setShowCustomIntervalModal(false)}
                 style={{
                   background: "rgba(255,255,255,0.08)",
-                  border: "none",
+                  border: "1px solid rgba(255,255,255,0.2)",
                   color: "#cbd5e1",
                   cursor: "pointer",
                   borderRadius: "50%",
@@ -3656,6 +3998,8 @@ export default function TvPlayerPage() {
                 ].map((item) => (
                   <button
                     key={item.sec}
+                    tabIndex={0}
+                    className="tv-focusable"
                     onClick={() => {
                       changeAudioInterval(item.sec);
                       setShowCustomIntervalModal(false);
@@ -3737,6 +4081,8 @@ export default function TvPlayerPage() {
                 </select>
                 <button
                   type="submit"
+                  tabIndex={0}
+                  className="tv-focusable"
                   style={{
                     padding: "12px 22px",
                     borderRadius: 14,
