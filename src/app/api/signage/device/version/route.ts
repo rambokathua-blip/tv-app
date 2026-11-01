@@ -14,10 +14,12 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 /**
- * Device or TV Display polls this to check the current version number.
- * Open and fast — no pairing required!
+ * Device or TV Display polls this to check the current version number and live broadcasts.
+ * Open and ultra-fast — no pairing required!
  */
 export async function GET(request: Request) {
+  const memoryBroadcast = (globalThis as any).__latestBroadcast || (devStore as any).activeAnnouncement || null;
+
   try {
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -28,13 +30,17 @@ export async function GET(request: Request) {
       .single();
 
     if (!error && data) {
-      const control = (data.snapshot as any)?.control || {};
+      const snapshot = (data.snapshot as any) || {};
+      const control = snapshot.control || {};
+      const activeAnnouncement = snapshot.active_announcement || memoryBroadcast || null;
+
       return NextResponse.json(
         {
           version: data.version_no,
           published_at: data.published_at,
           is_paused: control.is_paused ?? false,
           last_command: control.last_command ?? null,
+          active_announcement: activeAnnouncement,
         },
         {
           status: 200,
@@ -58,6 +64,7 @@ export async function GET(request: Request) {
       published_at: new Date().toISOString(),
       is_paused: fallbackControl.is_paused ?? false,
       last_command: fallbackControl.last_command ?? null,
+      active_announcement: memoryBroadcast || (devStore as any).activeAnnouncement || null,
     },
     {
       status: 200,

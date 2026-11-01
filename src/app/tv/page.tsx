@@ -265,21 +265,9 @@ export default function TvPlayerPage() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
-  // Handler when audio playback finishes (triggers interval countdown for next play)
-  const handleAudioEnded = useCallback(() => {
-    if (isAudioMuted || activeBroadcast) return;
-
-    if (audioIntervalSec === 0) {
-      // Continuous loop mode: immediately loop back
-      const audio = audioRef.current;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch(() => {});
-      }
-      return;
-    }
-
-    // Interval mode: Pause, then start countdown until next trigger
+  // Start countdown for interval gap between background audio tracks
+  const startAudioIntervalCountdown = useCallback(() => {
+    if (isAudioMuted || activeBroadcast || audioIntervalSec === 0) return;
     setIsAudioPlaying(false);
     let remaining = audioIntervalSec;
     setAudioIntervalCountdown(remaining);
@@ -304,6 +292,24 @@ export default function TvPlayerPage() {
     }, 1000);
   }, [audioIntervalSec, isAudioMuted, activeBroadcast]);
 
+  // Handler when background audio playback finishes (triggers interval countdown for next play)
+  const handleAudioEnded = useCallback(() => {
+    if (isAudioMuted || activeBroadcast) return;
+
+    if (audioIntervalSec === 0) {
+      // Continuous loop mode: immediately loop back
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+      return;
+    }
+
+    // Interval mode: pause and start countdown until next trigger (no immediate play)
+    startAudioIntervalCountdown();
+  }, [audioIntervalSec, isAudioMuted, activeBroadcast, startAudioIntervalCountdown]);
+
   // Adjust audio trigger interval
   const changeAudioInterval = useCallback((sec: number) => {
     setAudioIntervalSec(sec);
@@ -327,13 +333,135 @@ export default function TvPlayerPage() {
         audio.play().catch(() => {});
       } else {
         audio.loop = false;
-        audio.currentTime = 0;
-        audio.play().catch(() => {});
+        audio.pause();
+        setIsAudioPlaying(false);
+        // Start countdown for the newly set duration
+        let remaining = sec;
+        setAudioIntervalCountdown(remaining);
+        intervalCountdownRef.current = setInterval(() => {
+          remaining -= 1;
+          if (remaining <= 0) {
+            if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+            setAudioIntervalCountdown(null);
+            if (audioRef.current && !isAudioMuted && !activeBroadcast) {
+              audioRef.current.currentTime = 0;
+              audioRef.current
+                .play()
+                .then(() => setIsAudioPlaying(true))
+                .catch(() => {});
+            }
+          } else {
+            setAudioIntervalCountdown(remaining);
+          }
+        }, 1000);
       }
     }
   }, [isAudioMuted, activeBroadcast]);
 
-  // Sync background audio with manifest and user preference
+  // High-Speed Instant Broadcast Announcement Player (0ms local, zero background sound trigger)
+  const playBroadcastAnnouncement = useCallback(
+    (ann: { id: string; text: string; lang?: string; audio_url?: string | null }) => {
+      if (!ann || !ann.id || !ann.text || ann.id === lastBroadcastIdRef.current) return;
+
+      const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+      if (isAudioMuted || isInIframe) return;
+
+      lastBroadcastIdRef.current = ann.id;
+      setActiveBroadcast({
+        id: ann.id,
+        text: ann.text,
+        lang: ann.lang || "hi-IN",
+        audio_url: ann.audio_url || null,
+      });
+
+      // ZERO-COLLISION: Completely pause background audio immediately
+      const bgAudio = audioRef.current;
+      if (bgAudio) {
+        wasBgPlayingRef.current = !bgAudio.paused && audioIntervalSec === 0;
+        bgAudio.pause();
+      } else {
+        wasBgPlayingRef.current = false;
+      }
+
+      // Clear any pending audio interval countdown so it never triggers during announcement
+      if (intervalCountdownRef.current) {
+        clearInterval(intervalCountdownRef.current);
+      }
+      setAudioIntervalCountdown(null);
+
+      const speechVolume = manifest.voice?.settings?.volume ? manifest.voice.settings.volume / 100 : 1;
+
+      let isFinished = false;
+      const resumeBackground = () => {
+        if (isFinished) return;
+        isFinished = true;
+        setTimeout(() => {
+          setActiveBroadcast(null);
+          // CRITICAL FIX: Background sound must NEVER trigger immediately on broadcast completion!
+          // It must strictly wait for its own default set interval time (audioIntervalSec).
+          if (audioIntervalSec === 0 && wasBgPlayingRef.current && !isAudioMuted && audioRef.current) {
+            audioRef.current.play().catch(() => {});
+          } else if (audioIntervalSec > 0 && !isAudioMuted) {
+            // Restart countdown for configured gap (e.g. 1 min, 2 min) so it waits the proper interval
+            startAudioIntervalCountdown();
+          }
+        }, 500);
+      };
+
+      // FAST-PATH 1: Android TV Native TTS (0ms latency, runs in APK offline)
+      if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
+        (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
+        const approxDurationMs = Math.max(3500, Math.min(30000, ann.text.length * 85));
+        setTimeout(resumeBackground, approxDurationMs);
+        return;
+      }
+
+      // FAST-PATH 2: Web Speech Synthesis (0ms latency in Chrome/Edge/Smart TV browsers, zero network wait)
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(ann.text);
+          utterance.lang = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi-IN" : "en-IN";
+          utterance.rate = 1.0;
+          utterance.volume = speechVolume;
+          utterance.onend = resumeBackground;
+          utterance.onerror = resumeBackground;
+          window.speechSynthesis.speak(utterance);
+          const maxSafetyMs = Math.max(4000, Math.min(30000, ann.text.length * 100));
+          setTimeout(() => {
+            if (!isFinished) resumeBackground();
+          }, maxSafetyMs);
+          return;
+        } catch {
+          // Fallback to audio element if speech synthesis fails
+        }
+      }
+
+      // FALLBACK PATH 3: Dedicated Announcement Audio Element
+      const langCode = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi" : "en";
+      const ttsUrl =
+        ann.audio_url ||
+        `/api/signage/admin/voice/tts?text=${encodeURIComponent(ann.text)}&lang=${langCode}`;
+
+      const annAudio = announcementAudioRef.current;
+      if (annAudio) {
+        annAudio.pause();
+        annAudio.src = ttsUrl;
+        annAudio.volume = Math.max(0.1, Math.min(1, speechVolume));
+        annAudio.onended = resumeBackground;
+        annAudio.onerror = resumeBackground;
+        const playPromise = annAudio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(resumeBackground);
+        }
+      } else {
+        resumeBackground();
+      }
+    },
+    [audioIntervalSec, isAudioMuted, manifest.voice?.settings, startAudioIntervalCountdown]
+  );
+
+  // Sync background audio volume and mute state (CRITICAL: never auto-play on interval mode!)
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -343,32 +471,29 @@ export default function TvPlayerPage() {
       audio.volume = Math.max(0, Math.min(1, audioConfig.volume));
     }
 
-    // Do not resume background audio if a live announcement is currently broadcasting
+    // Do not touch background audio if a live announcement is broadcasting
     if (activeBroadcast) return;
 
-    if (!isAudioMuted) {
-      audio.muted = false;
-      audio.loop = audioIntervalSec === 0;
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            setIsAudioPlaying(true);
-            setAutoplayBlocked(false);
-          })
-          .catch(() => {
-            setIsAudioPlaying(false);
-            setAutoplayBlocked(true);
-          });
-      }
-    } else {
+    if (isAudioMuted) {
       audio.pause();
       audio.muted = true;
       setIsAudioPlaying(false);
       if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
       setAudioIntervalCountdown(null);
+      return;
     }
-  }, [manifest.audio, isAudioMuted, activeBroadcast, audioIntervalSec]);
+
+    // CRITICAL FIX: Only play here if CONTINUOUS LOOP mode (audioIntervalSec === 0).
+    // If audioIntervalSec > 0 (interval mode), DO NOT play! Background sound must strictly
+    // play on its own timer and NOT trigger when manifest updates or broadcasts occur.
+    if (audioIntervalSec === 0) {
+      audio.muted = false;
+      audio.loop = true;
+      if (audio.paused) {
+        audio.play().catch(() => setAutoplayBlocked(true));
+      }
+    }
+  }, [manifest.audio?.volume, isAudioMuted, activeBroadcast, audioIntervalSec]);
 
   // Click / Key gesture to unblock autoplay
   useEffect(() => {
@@ -689,7 +814,7 @@ export default function TvPlayerPage() {
 
   // Real-Time Synchronization (Version Polling + BroadcastChannel + LocalStorage)
   useEffect(() => {
-    // 1. Version polling every 2 seconds for instant updates across different devices & networks
+    // 1. High-frequency version polling (1000ms) for ultra-fast cross-device announcements & updates
     const versionPoll = setInterval(async () => {
       try {
         const headers: Record<string, string> = {};
@@ -700,9 +825,19 @@ export default function TvPlayerPage() {
         });
         if (res.ok) {
           const data = await res.json();
+
+          // Instant Live Broadcast Announcement Detection (bypasses heavy manifest download!)
+          if (
+            data.active_announcement &&
+            data.active_announcement.id &&
+            data.active_announcement.id !== lastBroadcastIdRef.current
+          ) {
+            playBroadcastAnnouncement(data.active_announcement);
+          }
+
           if (data.version && data.version !== manifestVersionRef.current) {
             manifestVersionRef.current = data.version;
-            fetchManifest(true);
+            fetchManifest(false);
           }
           if (typeof data.is_paused === "boolean" && data.is_paused !== isPausedRef.current) {
             isPausedRef.current = data.is_paused;
@@ -723,15 +858,17 @@ export default function TvPlayerPage() {
       } catch {
         // network issue
       }
-    }, 2000);
+    }, 1000);
 
     // 2. BroadcastChannel for instant 0ms real-time sync across browser tabs/windows
     let syncChannel: BroadcastChannel | null = null;
     try {
       syncChannel = new BroadcastChannel("kathua_tv_sync");
       syncChannel.onmessage = (event) => {
-        if (event.data?.type === "TV_SYNC" || event.data?.type === "SYNC_OFFERS") {
-          fetchManifest(true);
+        if (event.data?.type === "LIVE_BROADCAST" && event.data?.announcement) {
+          playBroadcastAnnouncement(event.data.announcement);
+        } else if (event.data?.type === "TV_SYNC" || event.data?.type === "SYNC_OFFERS") {
+          fetchManifest(false);
         } else if (event.data?.type === "PAUSE_TV") {
           setIsPaused(true);
         } else if (event.data?.type === "RESUME_TV") {
@@ -748,7 +885,11 @@ export default function TvPlayerPage() {
             if (audioRef.current) {
               audioRef.current.muted = !enabled;
               if (enabled) {
-                audioRef.current.play().catch(() => {});
+                if (audioIntervalSec === 0) {
+                  audioRef.current.play().catch(() => {});
+                } else {
+                  startAudioIntervalCountdown();
+                }
               } else {
                 audioRef.current.pause();
               }
@@ -758,10 +899,15 @@ export default function TvPlayerPage() {
       };
     } catch {}
 
-    // 3. Storage event for cross-tab sync
+    // 3. Storage event for cross-tab sync & instant broadcasts
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === "signage_force_refresh" || e.key === "kathua_signage_promotions") {
-        fetchManifest();
+      if (e.key === "kathua_live_broadcast" && e.newValue) {
+        try {
+          const ann = JSON.parse(e.newValue);
+          playBroadcastAnnouncement(ann);
+        } catch {}
+      } else if (e.key === "signage_force_refresh" || e.key === "kathua_signage_promotions") {
+        fetchManifest(false);
       }
     };
     window.addEventListener("storage", handleStorage);
@@ -800,112 +946,18 @@ export default function TvPlayerPage() {
       if (syncChannel) syncChannel.close();
       window.removeEventListener("storage", handleStorage);
     };
-  }, [token, fetchManifest]);
+  }, [token, fetchManifest, playBroadcastAnnouncement, audioIntervalSec, startAudioIntervalCountdown]);
 
-  // Listen for Live Broadcast Announcements
+  // Listen for Live Broadcast Announcements from manifest
   useEffect(() => {
-    const ann = manifest.active_announcement;
-    if (!ann || !ann.id || ann.id === lastBroadcastIdRef.current) return;
-
-    // Do not play voice announcement if muted, in an iframe preview, or voice is disabled
-    const isInIframe = typeof window !== "undefined" && window.self !== window.top;
-    const isVoiceDisabled = manifest.voice?.settings?.master_enabled === false;
-    const isAudioDisabled = manifest.audio?.enabled === false;
-    if (isAudioMuted || isInIframe || isVoiceDisabled || isAudioDisabled) return;
-
-    lastBroadcastIdRef.current = ann.id;
-    setActiveBroadcast(ann);
-
-    // ZERO-COLLISION: Completely pause background audio while broadcast plays
-    const bgAudio = audioRef.current;
-    if (bgAudio && !bgAudio.paused) {
-      wasBgPlayingRef.current = true;
-      bgAudio.pause();
-    } else {
-      wasBgPlayingRef.current = false;
+    if (
+      manifest.active_announcement &&
+      manifest.active_announcement.id &&
+      manifest.active_announcement.id !== lastBroadcastIdRef.current
+    ) {
+      playBroadcastAnnouncement(manifest.active_announcement);
     }
-
-    const speechVolume = manifest.voice?.settings?.volume ? manifest.voice.settings.volume / 100 : 1;
-
-    // Helper to safely restore background audio after announcement completes fully
-    const resumeBackground = () => {
-      setTimeout(() => {
-        setActiveBroadcast(null);
-        const audioConfig = manifest.audio ?? FALLBACK_MANIFEST.audio;
-        const isRemotelyEnabled = audioConfig?.enabled ?? true;
-        if (wasBgPlayingRef.current && isRemotelyEnabled && !isAudioMuted && audioRef.current) {
-          audioRef.current.play().catch(() => {});
-        }
-      }, 800);
-    };
-
-    // Realistic Natural Voice URL
-    const langCode = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi" : "en";
-    const ttsUrl =
-      ann.audio_url ||
-      `/api/signage/admin/voice/tts?text=${encodeURIComponent(ann.text)}&lang=${langCode}`;
-
-    const annAudio = announcementAudioRef.current;
-    if (annAudio) {
-      annAudio.pause();
-      annAudio.src = ttsUrl;
-      annAudio.volume = Math.max(0.1, Math.min(1, speechVolume));
-
-      annAudio.onended = () => {
-        resumeBackground();
-      };
-
-      annAudio.onerror = () => {
-        // Fallback to browser SpeechSynthesis if network stream fails
-        if ("speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(ann.text);
-          utterance.lang = ann.lang || "hi-IN";
-          utterance.rate = 0.95;
-          utterance.volume = speechVolume;
-          utterance.onend = resumeBackground;
-          utterance.onerror = resumeBackground;
-          window.speechSynthesis.speak(utterance);
-        } else if ((window as any).AndroidSignage?.speak) {
-          (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
-          setTimeout(resumeBackground, 6000);
-        } else {
-          resumeBackground();
-        }
-      };
-
-      const playPromise = annAudio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          if ("speechSynthesis" in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(ann.text);
-            utterance.lang = ann.lang || "hi-IN";
-            utterance.rate = 0.95;
-            utterance.volume = speechVolume;
-            utterance.onend = resumeBackground;
-            utterance.onerror = resumeBackground;
-            window.speechSynthesis.speak(utterance);
-          } else {
-            resumeBackground();
-          }
-        });
-      }
-    } else {
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(ann.text);
-        utterance.lang = ann.lang || "hi-IN";
-        utterance.rate = 0.95;
-        utterance.volume = speechVolume;
-        utterance.onend = resumeBackground;
-        utterance.onerror = resumeBackground;
-        window.speechSynthesis.speak(utterance);
-      } else {
-        resumeBackground();
-      }
-    }
-  }, [manifest.active_announcement, isAudioMuted, manifest.audio, manifest.voice?.settings]);
+  }, [manifest.active_announcement, playBroadcastAnnouncement]);
 
   // Generate SVG QR codes for manifest QR items
   useEffect(() => {
