@@ -1,7 +1,23 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
+// Circuit breaker for unreachable / paused Supabase cloud database
+let lastFailTimestamp = 0;
+const COOLDOWN_MS = 45000; // After a failure, skip Supabase calls for 45s so server/UI remains ultra-fast
+
+export function isSupabaseOffline(): boolean {
+  return Date.now() - lastFailTimestamp < COOLDOWN_MS;
+}
+
+export function markSupabaseOffline() {
+  lastFailTimestamp = Date.now();
+}
+
+export function markSupabaseOnline() {
+  lastFailTimestamp = 0;
+}
+
 /**
- * Server-only Supabase admin client using the secret key.
+ * Server-only Supabase admin client using the secret key with 1.8s timeout & circuit breaker.
  * This bypasses RLS — use ONLY in route handlers, NEVER in client bundles.
  */
 export function createAdminClient() {
@@ -24,6 +40,31 @@ export function createAdminClient() {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    global: {
+      fetch: async (fetchUrl, options = {}) => {
+        // If circuit breaker is open, fail immediately without waiting for DNS timeout
+        if (isSupabaseOffline()) {
+          throw new Error("Supabase cloud currently paused/unreachable (circuit breaker active)");
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1800); // 1.8s max network timeout
+
+        try {
+          const res = await fetch(fetchUrl, {
+            ...options,
+            signal: controller.signal,
+          });
+          markSupabaseOnline();
+          return res;
+        } catch (err) {
+          markSupabaseOffline();
+          throw err;
+        } finally {
+          clearTimeout(timeout);
+        }
+      },
     },
   });
 }

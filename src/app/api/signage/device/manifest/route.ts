@@ -50,11 +50,13 @@ export async function GET(request: Request) {
         try {
           const { data: dbPromos } = await admin
             .from("signage_promotions")
-            .select("id, mrp, notes, price_text");
+            .select("id, title, mrp, notes, price_text");
           if (dbPromos && dbPromos.length > 0) {
             const promoMap = new Map<string, any>(dbPromos.map((p) => [p.id, p]));
             snap.slides = snap.slides.map((sl: any) => {
-              const dbP = promoMap.get(sl.promotion_id || sl.id);
+              const dbP =
+                promoMap.get(sl.promotion_id || sl.id) ||
+                (dbPromos as any[]).find((p) => p.title?.toLowerCase()?.trim() === sl.title?.toLowerCase()?.trim());
               const meta = unpackPromotionNotes(dbP?.notes);
               let mrp = sl.mrp || dbP?.mrp || meta.mrp || null;
 
@@ -74,6 +76,15 @@ export async function GET(request: Request) {
             });
           }
         } catch {}
+
+        // Strict deduplication of slides by title/id so TV never plays duplicate slides
+        const seenSlideKeys = new Set<string>();
+        snap.slides = snap.slides.filter((sl: any) => {
+          const key = (sl.title || sl.promotion_id || sl.id || "").trim().toLowerCase();
+          if (key && seenSlideKeys.has(key)) return false;
+          seenSlideKeys.add(key);
+          return true;
+        });
       }
 
       return NextResponse.json(snap, {

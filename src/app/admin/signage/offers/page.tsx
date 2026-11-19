@@ -30,11 +30,16 @@ export default function OffersManagePage() {
             const seen = new Set<string>();
             const deduped: Promotion[] = [];
             for (const p of parsed) {
-              const k = (p.title || "").trim().toLowerCase();
+              const k = (p.title || p.id || "").trim().toLowerCase();
               if (k && !seen.has(k)) {
                 seen.add(k);
                 deduped.push(p);
               }
+            }
+            if (deduped.length !== parsed.length) {
+              try {
+                localStorage.setItem("kathua_signage_promotions", JSON.stringify(deduped));
+              } catch {}
             }
             return deduped;
           }
@@ -93,21 +98,52 @@ export default function OffersManagePage() {
           return;
         }
 
-        if (serverPromos.length > 0) {
-          // Strict deduplication by title so UI never shows duplicate rows
-          const seenTitles = new Set<string>();
-          const uniquePromos: Promotion[] = [];
-          for (const p of serverPromos) {
-            const titleKey = (p.title || "").trim().toLowerCase();
-            if (titleKey && !seenTitles.has(titleKey)) {
-              seenTitles.add(titleKey);
-              uniquePromos.push(p);
-            }
+        // Intelligent bidirectional merge:
+        // 1. Start with serverPromos (source of cloud truth)
+        // 2. Merge localPromos: if a local promo is newer or has media/mrp that server missed, preserve it
+        // 3. If localPromos has a newly added promo NOT on server, KEEP IT and push it to sync!
+        const mergedPromosMap = new Map<string, Promotion>();
+        const localByTitle = new Map<string, Promotion>();
+        for (const lp of localPromos) {
+          if (lp.title) localByTitle.set(lp.title.trim().toLowerCase(), lp);
+        }
+
+        for (const sp of serverPromos) {
+          if (!sp.title) continue;
+          const key = sp.title.trim().toLowerCase();
+          const lp = localByTitle.get(key);
+          const enriched: Promotion = {
+            ...sp,
+            mrp: sp.mrp || lp?.mrp || null,
+            media_id: (sp.media_id && sp.media_id !== "/kathua-fresh-logo.jpg") ? sp.media_id : (lp?.media_id || sp.media_id),
+            media: sp.media || lp?.media,
+          };
+          mergedPromosMap.set(key, enriched);
+        }
+
+        // Add any local promotions that the server didn't have yet!
+        let hasUnsyncedLocal = false;
+        for (const lp of localPromos) {
+          if (!lp.title) continue;
+          const key = lp.title.trim().toLowerCase();
+          if (!mergedPromosMap.has(key)) {
+            mergedPromosMap.set(key, lp);
+            hasUnsyncedLocal = true;
           }
-          setPromotions(uniquePromos);
-          try {
-            localStorage.setItem("kathua_signage_promotions", JSON.stringify(uniquePromos));
-          } catch {}
+        }
+
+        const finalPromos = Array.from(mergedPromosMap.values());
+        setPromotions(finalPromos);
+        try {
+          localStorage.setItem("kathua_signage_promotions", JSON.stringify(finalPromos));
+        } catch {}
+
+        if (hasUnsyncedLocal) {
+          fetch("/api/signage/admin/promotions/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ promotions: finalPromos }),
+          }).catch(() => {});
         }
       }
     } catch {

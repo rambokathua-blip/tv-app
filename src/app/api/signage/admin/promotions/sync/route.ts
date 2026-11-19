@@ -49,6 +49,26 @@ export async function POST(request: Request) {
       }
     }
     devStore.promotions = Array.from(titleToPromo.values());
+
+    // Ensure all active promotions are present in devStore.playlist so TV slides render them
+    for (const p of devStore.promotions) {
+      const existsInPlaylist = devStore.playlist.some(
+        (pl) =>
+          pl.promotion_id === p.id ||
+          (pl.promotion?.title && p.title && pl.promotion.title.trim().toLowerCase() === p.title.trim().toLowerCase())
+      );
+      if (!existsInPlaylist) {
+        devStore.playlist.unshift({
+          id: "pl-" + p.id,
+          playlist_id: "default",
+          promotion_id: p.id,
+          position: 1,
+          enabled: p.enabled !== false && p.status === "live",
+          promotion: p,
+        });
+      }
+    }
+
     devStore.publish();
 
     // 2. Cross-device sync: If Supabase cloud database is reachable, upsert promotions without creating duplicates
