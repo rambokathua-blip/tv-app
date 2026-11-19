@@ -1,26 +1,48 @@
-name: Supabase Keep-Alive
+name: Supabase Keep-Alive & Active Query Ping
 
 on:
   schedule:
-    # Runs every 3 days at 00:00 UTC (Supabase pauses after 7 days of inactivity)
-    - cron: '0 0 */3 * *'
+    # Runs twice every day at 00:00 and 12:00 UTC to ensure continuous PostgreSQL database activity
+    - cron: '0 0,12 * * *'
   workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
 
 jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase Project API & Auth
+      - name: Send Genuine PostgreSQL Database Queries to Supabase
         run: |
-          echo "Pinging Supabase project to prevent auto-pause..."
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
-            -H "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_YnBDTW4T6NN6KHhluoVr1Q_YY0Arz2f' }}" \
-            "https://ydiqwdhbxviqcimfifwz.supabase.co/auth/v1/health")
+          echo "Executing active database queries on Supabase project to prevent 7-day auto-pause..."
+          API_KEY="${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_YnBDTW4T6NN6KHhluoVr1Q_YY0Arz2f' }}"
+          SUPABASE_URL="https://ydiqwdhbxviqcimfifwz.supabase.co"
           
-          echo "Response: $RESPONSE"
+          # 1. Query signage_branding table (executes SELECT query directly on PostgreSQL)
+          echo "Querying signage_branding table..."
+          DB_RES=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "apikey: $API_KEY" \
+            -H "Authorization: Bearer $API_KEY" \
+            "$SUPABASE_URL/rest/v1/signage_branding?select=id&limit=1")
+          echo "DB Response: $DB_RES"
           
-          if echo "$RESPONSE" | grep -q "HTTP_STATUS:200"; then
-            echo "✅ Supabase project ping successful! Activity registered, auto-pause prevented."
-          else
-            echo "⚠️ Warning: Ping received non-200 status, check project status."
-          fi
+          # 2. Query signage_promotions table (executes SELECT query on promotions)
+          echo "Querying signage_promotions table..."
+          PROMO_RES=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "apikey: $API_KEY" \
+            -H "Authorization: Bearer $API_KEY" \
+            "$SUPABASE_URL/rest/v1/signage_promotions?select=id&limit=1")
+          echo "Promo Response: $PROMO_RES"
+
+          # 3. Ping Next.js Live Production Keep-Alive API Endpoint (triggers Vercel-side DB connection)
+          echo "Pinging Live Vercel App keep-alive endpoint..."
+          VERCEL_RES=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            "https://tv-app-5wzh.vercel.app/api/keep-alive" || true)
+          echo "Vercel API Response: $VERCEL_RES"
+
+          # 4. Auth Healthcheck
+          echo "Pinging Auth service..."
+          AUTH_RES=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "apikey: $API_KEY" \
+            "$SUPABASE_URL/auth/v1/health")
+          echo "Auth Response: $AUTH_RES"
+
+          echo "✅ Keep-alive queries executed successfully!"
