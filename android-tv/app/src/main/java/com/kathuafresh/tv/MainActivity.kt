@@ -155,7 +155,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun checkAppPermissions() {
-        // Permissions are requested on demand when the user taps Take Photo
+        // Proactively request Camera permission on launch so Android / MIUI registers it under App Permissions
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.CAMERA),
+                PERMISSION_REQUEST_CODE
+            )
+        }
     }
 
     private fun hideSystemUI() {

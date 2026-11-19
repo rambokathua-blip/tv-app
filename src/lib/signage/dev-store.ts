@@ -410,8 +410,17 @@ class DevStore {
 
   deletePromotion(id: string): boolean {
     this.load();
-    this.promotions = this.promotions.filter((p) => p.id !== id);
-    this.playlist = this.playlist.filter((p) => p.promotion_id !== id);
+    const target = this.promotions.find((p) => p.id === id);
+    const targetTitle = target?.title?.trim().toLowerCase();
+    this.promotions = this.promotions.filter((p) => {
+      if (p.id === id) return false;
+      if (targetTitle && p.title?.trim().toLowerCase() === targetTitle) return false;
+      return true;
+    });
+    this.playlist = this.playlist.filter((p) => {
+      const matchPromo = this.promotions.find((pr) => pr.id === p.promotion_id);
+      return Boolean(matchPromo);
+    });
     this.publish();
     return true;
   }

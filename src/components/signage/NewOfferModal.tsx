@@ -208,19 +208,6 @@ export default function NewOfferModal({
   };
 
   const handleOpenSource = (isCamera: boolean) => {
-    // In Android APK, use bridge if available
-    if (typeof window !== "undefined" && (window as any).AndroidSignage) {
-      if (isCamera && typeof (window as any).AndroidSignage.openCamera === "function") {
-        (window as any).AndroidSignage.openCamera();
-        return;
-      }
-      if (!isCamera && typeof (window as any).AndroidSignage.openImagePicker === "function") {
-        (window as any).AndroidSignage.openImagePicker();
-        return;
-      }
-    }
-
-    // Direct browser file input activation
     const id = isCamera ? "new-offer-camera-input" : "new-offer-gallery-input";
     const el = document.getElementById(id) as HTMLInputElement | null;
     el?.click();
@@ -593,28 +580,31 @@ export default function NewOfferModal({
 
                   {/* Change Picture Buttons */}
                   <div className="grid grid-cols-2 gap-2 pt-0.5">
-                    <label
-                      htmlFor="new-offer-gallery-input"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSource(false)}
                       className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                     >
                       <Upload className="w-4 h-4 shrink-0" />
                       <span>Change Picture</span>
-                    </label>
-                    <label
-                      htmlFor="new-offer-camera-input"
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSource(true)}
                       className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                     >
                       <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>Take New Photo</span>
-                    </label>
+                    </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Direct Native Touch Targets */}
                   <div className="grid grid-cols-2 gap-3">
-                    <label
-                      htmlFor="new-offer-camera-input"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSource(true)}
                       className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border-2 border-emerald-500/40 hover:border-emerald-400 active:scale-95 flex flex-col items-center justify-center text-center cursor-pointer transition-all shadow-lg select-none"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center mb-2 shadow-md">
@@ -626,10 +616,11 @@ export default function NewOfferModal({
                       <div className="text-[10px] text-emerald-300 font-semibold mt-0.5">
                         Open Phone Camera
                       </div>
-                    </label>
+                    </button>
 
-                    <label
-                      htmlFor="new-offer-gallery-input"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSource(false)}
                       className="p-5 rounded-2xl bg-slate-950 border-2 border-slate-800 hover:border-slate-700 active:scale-95 flex flex-col items-center justify-center text-center cursor-pointer transition-all shadow-lg select-none"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-slate-800 text-emerald-400 flex items-center justify-center mb-2">
@@ -641,23 +632,6 @@ export default function NewOfferModal({
                       <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
                         Select from Files / Album
                       </div>
-                    </label>
-                  </div>
-
-                  {/* Android Permission Shortcut Banner */}
-                  <div className="flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== "undefined" && (window as any).AndroidSignage?.openAppSettings) {
-                          (window as any).AndroidSignage.openAppSettings();
-                        } else if (typeof window !== "undefined" && (window as any).AndroidSignage?.requestPermissions) {
-                          (window as any).AndroidSignage.requestPermissions();
-                        }
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-emerald-400 active:text-emerald-300 transition-colors flex items-center gap-1.5 py-0.5 underline underline-offset-4"
-                    >
-                      <span>🔒 Android App: Permission blocked? Tap to Open Settings</span>
                     </button>
                   </div>
 

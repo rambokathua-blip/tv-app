@@ -20,14 +20,23 @@ import EditOfferModal from "@/components/signage/EditOfferModal";
 export default function OffersManagePage() {
   const [filter, setFilter] = useState<string>("all");
   const [promotions, setPromotions] = useState<Promotion[]>(() => {
-    // Restore from localStorage first so uploaded images survive refresh
+    // Restore from localStorage first with strict title deduplication
     if (typeof window !== "undefined") {
       try {
         const cached = localStorage.getItem("kathua_signage_promotions");
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
+            const seen = new Set<string>();
+            const deduped: Promotion[] = [];
+            for (const p of parsed) {
+              const k = (p.title || "").trim().toLowerCase();
+              if (k && !seen.has(k)) {
+                seen.add(k);
+                deduped.push(p);
+              }
+            }
+            return deduped;
           }
         }
       } catch {}
@@ -41,22 +50,57 @@ export default function OffersManagePage() {
   const [deleteTarget, setDeleteTarget] = useState<Promotion | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Fetch promotions from API — server truth is authoritative
+  // Fetch promotions from API — resilient cache-preserving sync with strict deduplication
   const loadPromotions = async () => {
     try {
+      // Check existing local storage promotions
+      let localPromos: Promotion[] = [];
+      try {
+        const raw = localStorage.getItem("kathua_signage_promotions");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const seen = new Set<string>();
+            for (const p of parsed) {
+              const k = (p.title || "").trim().toLowerCase();
+              if (k && !seen.has(k)) {
+                seen.add(k);
+                localPromos.push(p);
+              }
+            }
+          }
+        }
+      } catch {}
+
       const res = await fetch("/api/signage/admin/promotions");
       if (res.ok) {
         const data = await res.json();
-        if (data.promotions) {
-          // Deduplicate defensively so UI never shows duplicate rows
-          const seenIds = new Set<string>();
-          const seenKeys = new Set<string>();
+        const serverPromos: Promotion[] = Array.isArray(data.promotions) ? data.promotions : [];
+
+        // CRITICAL DEFENSE: If server returns 0 promotions BUT client has local promotions,
+        // DO NOT WIPE LOCAL STORAGE! (e.g. database paused or container restart).
+        // Instead, retain local promotions and auto-heal the server in the background.
+        if (serverPromos.length === 0 && localPromos.length > 0) {
+          console.warn("Server returned 0 promotions, preserving local promotions and auto-healing server.");
+          setPromotions(localPromos);
+
+          // Auto-heal: send local promotions back to server so TV & server recover instantly
+          fetch("/api/signage/admin/promotions/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ promotions: localPromos }),
+          }).catch(() => {});
+          return;
+        }
+
+        if (serverPromos.length > 0) {
+          // Strict deduplication by title so UI never shows duplicate rows
+          const seenTitles = new Set<string>();
           const uniquePromos: Promotion[] = [];
-          for (const p of data.promotions) {
-            const contentKey = `${(p.title || "").trim().toLowerCase()}:::${(p.price_text || "").trim().toLowerCase()}`;
-            if (!seenIds.has(p.id) && !seenKeys.has(contentKey)) {
-              seenIds.add(p.id);
-              seenKeys.add(contentKey);
+          for (const p of serverPromos) {
+            const titleKey = (p.title || "").trim().toLowerCase();
+            if (titleKey && !seenTitles.has(titleKey)) {
+              seenTitles.add(titleKey);
               uniquePromos.push(p);
             }
           }
@@ -67,7 +111,7 @@ export default function OffersManagePage() {
         }
       }
     } catch {
-      // keep fallback
+      // Keep existing fallback from localStorage
     } finally {
       setIsLoading(false);
     }
@@ -116,18 +160,20 @@ export default function OffersManagePage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
-    const targetTitle = deleteTarget.title;
+    const targetTitle = (deleteTarget.title || "").trim().toLowerCase();
 
-    // 1. Instant optimistic UI removal (0ms latency!)
+    // 1. Instant optimistic UI removal of this offer and any duplicate rows
     setPromotions((prev) => {
-      const next = prev.filter((p) => p.id !== targetId);
+      const next = prev.filter(
+        (p) => p.id !== targetId && (p.title || "").trim().toLowerCase() !== targetTitle
+      );
       try {
         localStorage.setItem("kathua_signage_promotions", JSON.stringify(next));
       } catch {}
       return next;
     });
     setDeleteTarget(null);
-    setToastMessage(`✓ "${targetTitle}" deleted successfully`);
+    setToastMessage(`✓ "${deleteTarget.title}" deleted successfully`);
     setTimeout(() => setToastMessage(null), 3000);
 
     // 2. Real-time broadcast to TV

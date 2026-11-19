@@ -190,18 +190,10 @@ export default function EditOfferModal({
   if (!isOpen) return null;
 
   const triggerChooseFile = () => {
-    if (typeof window !== "undefined" && typeof (window as any).AndroidSignage?.openImagePicker === "function") {
-      (window as any).AndroidSignage.openImagePicker();
-      return;
-    }
     fileInputRef.current?.click();
   };
 
   const triggerCamera = () => {
-    if (typeof window !== "undefined" && typeof (window as any).AndroidSignage?.openCamera === "function") {
-      (window as any).AndroidSignage.openCamera();
-      return;
-    }
     cameraInputRef.current?.click();
   };
 
@@ -481,35 +473,22 @@ export default function EditOfferModal({
               {/* Tab 1: Upload & Camera Buttons */}
               {imageTab === "upload" && (
                 <div className="grid grid-cols-2 gap-2">
-                  <label
-                    htmlFor="edit-offer-file-input"
+                  <button
+                    type="button"
+                    onClick={triggerChooseFile}
                     className="py-3 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md text-center select-none"
                   >
                     <Upload className="w-4 h-4 shrink-0" />
                     <span>Choose from Files / Gallery</span>
-                  </label>
-                  <label
-                    htmlFor="edit-offer-camera-input"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={triggerCamera}
                     className="py-3 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all text-center select-none"
                   >
                     <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>Take New Photo (Camera)</span>
-                  </label>
-                  <div className="col-span-2 pt-1 flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== "undefined" && (window as any).AndroidSignage?.openAppSettings) {
-                          (window as any).AndroidSignage.openAppSettings();
-                        } else if (typeof window !== "undefined" && (window as any).AndroidSignage?.requestPermissions) {
-                          (window as any).AndroidSignage.requestPermissions();
-                        }
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-emerald-400 active:text-emerald-300 transition-colors flex items-center gap-1.5 underline underline-offset-4"
-                    >
-                      <span>🔒 Android App: Permission blocked? Tap to Open Settings</span>
-                    </button>
-                  </div>
+                  </button>
                 </div>
               )}
 

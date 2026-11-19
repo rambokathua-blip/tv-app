@@ -259,6 +259,19 @@ export async function DELETE(
       .single();
 
     if (!error && data) {
+      // Also archive any duplicate rows with the same title
+      if (data.title) {
+        try {
+          await admin
+            .from("signage_promotions")
+            .update({
+              status: "archived",
+              enabled: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("title", data.title);
+        } catch {}
+      }
       await admin.from("signage_playlist_items").delete().eq("promotion_id", id);
       await auditLog(auth.claims.sub, "promotion.delete", "promotion", id);
 

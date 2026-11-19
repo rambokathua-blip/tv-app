@@ -66,7 +66,19 @@ export async function GET(request: Request) {
           promo.mrp = promo.mrp || meta.mrp || null;
           return promo;
         });
-        return successResponse({ promotions: enriched, data: enriched });
+
+        // Deduplicate rows defensively by title so client never sees duplicate rows
+        const seenTitles = new Set<string>();
+        const uniqueEnriched: any[] = [];
+        for (const promo of enriched) {
+          const tKey = (promo.title || "").trim().toLowerCase();
+          if (!seenTitles.has(tKey)) {
+            seenTitles.add(tKey);
+            uniqueEnriched.push(promo);
+          }
+        }
+
+        return successResponse({ promotions: uniqueEnriched, data: uniqueEnriched });
       }
     } catch {
       // fallback
@@ -77,7 +89,18 @@ export async function GET(request: Request) {
   const filtered = status
     ? devStore.promotions.filter((p) => p.status === status)
     : devStore.promotions;
-  return successResponse({ promotions: filtered, data: filtered });
+
+  const seenDevTitles = new Set<string>();
+  const uniqueDev: any[] = [];
+  for (const p of filtered) {
+    const tKey = (p.title || "").trim().toLowerCase();
+    if (!seenDevTitles.has(tKey)) {
+      seenDevTitles.add(tKey);
+      uniqueDev.push(p);
+    }
+  }
+
+  return successResponse({ promotions: uniqueDev, data: uniqueDev });
 }
 
 export async function POST(request: Request) {
