@@ -56,6 +56,13 @@ export function createAdminClient() {
             ...options,
             signal: controller.signal,
           });
+
+          // If Supabase quota exceeded (402) or restricted (403/503), trip circuit breaker immediately
+          if (res.status === 402 || res.status === 403 || res.status === 503) {
+            markSupabaseOffline();
+            throw new Error(`Supabase cloud restricted (${res.status} Egress Exceeded) - fast fallback to local engine`);
+          }
+
           markSupabaseOnline();
           return res;
         } catch (err) {
