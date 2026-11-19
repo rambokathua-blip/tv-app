@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { unpackPromotionNotes } from "./api-utils";
 import type {
   Promotion,
   PlaylistItem,
@@ -55,14 +56,31 @@ class DevStore {
         if (raw && raw.trim()) {
           const data = JSON.parse(raw);
           if (data.promotions && Array.isArray(data.promotions)) {
-            this.promotions = data.promotions.filter(
-              (p: any) => p && p.id !== "demo-onion" && p.id !== "demo-apple"
-            );
+            const seenTitles = new Set<string>();
+            this.promotions = [];
+            for (const p of data.promotions) {
+              if (!p || p.id === "demo-onion" || p.id === "demo-apple") continue;
+              const k = (p.title || p.id || "").trim().toLowerCase();
+              if (k && !seenTitles.has(k)) {
+                seenTitles.add(k);
+                this.promotions.push({
+                  ...p,
+                  mrp: p.mrp || (p.notes ? unpackPromotionNotes(p.notes).mrp : null) || null,
+                });
+              }
+            }
           }
           if (data.playlist && Array.isArray(data.playlist)) {
-            this.playlist = data.playlist.filter(
-              (item: any) => item && item.promotion_id !== "demo-onion" && item.promotion_id !== "demo-apple"
-            );
+            const seenPlKeys = new Set<string>();
+            this.playlist = [];
+            for (const item of data.playlist) {
+              if (!item || item.promotion_id === "demo-onion" || item.promotion_id === "demo-apple") continue;
+              const key = (item.promotion?.title || item.promotion_id || item.id || "").trim().toLowerCase();
+              if (key && !seenPlKeys.has(key)) {
+                seenPlKeys.add(key);
+                this.playlist.push(item);
+              }
+            }
           }
           if (data.branding) {
             this.branding = data.branding;
@@ -284,6 +302,16 @@ class DevStore {
 
   addPromotion(promo: Omit<Promotion, "id" | "created_at" | "updated_at">): Promotion {
     this.load();
+    const cleanTitle = (promo.title || "").trim().toLowerCase();
+    if (cleanTitle) {
+      const existing = this.promotions.find(
+        (p) => (p.title || "").trim().toLowerCase() === cleanTitle
+      );
+      if (existing) {
+        return this.updatePromotion(existing.id, promo);
+      }
+    }
+
     const id = "promo-" + Date.now();
     let media = promo.media;
     if (promo.media_id) {
@@ -431,8 +459,11 @@ class DevStore {
       .filter((item) => item.enabled)
       .map((item) => {
         const promo =
-          this.promotions.find((p) => p.id === item.promotion_id) ||
-          item.promotion;
+          this.promotions.find(
+            (p) =>
+              p.id === item.promotion_id ||
+              (p.title && item.promotion?.title && p.title.toLowerCase().trim() === item.promotion.title.toLowerCase().trim())
+          ) || item.promotion;
         if (!promo || !promo.enabled) return null;
 
         let imgUrl =
@@ -468,7 +499,7 @@ class DevStore {
           promotion_id: promo.id,
           title: promo.title,
           price_text: promo.price_text,
-          mrp: promo.mrp || null,
+          mrp: promo.mrp || (promo.notes ? unpackPromotionNotes(promo.notes).mrp : null) || null,
           duration_sec:
             item.duration_override_sec || promo.duration_sec || 10,
           image_url: imgUrl,
@@ -504,13 +535,22 @@ class DevStore {
           promotion_id: promo.id,
           title: promo.title,
           price_text: promo.price_text,
-          mrp: promo.mrp || null,
+          mrp: promo.mrp || (promo.notes ? unpackPromotionNotes(promo.notes).mrp : null) || null,
           duration_sec: promo.duration_sec || 10,
           image_url: imgUrl,
         };
       });
 
     const allSlides = [...activePromos, ...livePromosNotInPlaylist];
+    const seenSlideKeys = new Set<string>();
+    const uniqueSlides: any[] = [];
+    for (const slide of allSlides) {
+      const key = (slide.title || slide.promotion_id || slide.id).trim().toLowerCase();
+      if (!seenSlideKeys.has(key)) {
+        seenSlideKeys.add(key);
+        uniqueSlides.push(slide);
+      }
+    }
 
     return {
       version: this.version,
@@ -524,7 +564,7 @@ class DevStore {
         layout_profile: this.branding.layout_profile,
       },
       qr_codes: this.qrCodes.filter((q) => q.enabled),
-      slides: allSlides as any,
+      slides: uniqueSlides as any,
       voice: {
         settings: this.voiceSettings || {
           master_enabled: true,

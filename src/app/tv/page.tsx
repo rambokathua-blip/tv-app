@@ -405,15 +405,12 @@ export default function TvPlayerPage() {
         isFinished = true;
         setTimeout(() => {
           setActiveBroadcast(null);
-          // CRITICAL FIX: Background sound must NEVER trigger immediately on broadcast completion!
-          // It must strictly wait for its own default set interval time (audioIntervalSec).
-          if (audioIntervalSec === 0 && wasBgPlayingRef.current && !isAudioMuted && audioRef.current) {
-            audioRef.current.play().catch(() => {});
-          } else if (audioIntervalSec > 0 && !isAudioMuted) {
-            // Restart countdown for configured gap (e.g. 1 min, 2 min) so it waits the proper interval
+          // CRITICAL FIX: Background sound must NEVER trigger on broadcast message!
+          // It only runs at its default set interval time (audioIntervalSec) if scheduled.
+          if (audioIntervalSec > 0 && !isAudioMuted) {
             startAudioIntervalCountdown();
           }
-        }, 500);
+        }, 300);
       };
 
       // Helper for tuned SpeechSynthesis with warmest Indian Hindi voice
@@ -440,7 +437,7 @@ export default function TvPlayerPage() {
           if (bestVoice) {
             utterance.voice = bestVoice;
           }
-          utterance.rate = 0.90; // Natural, warm broadcasting cadence
+          utterance.rate = 0.92; // Natural, warm broadcasting cadence
           utterance.pitch = 1.0;
           utterance.volume = speechVolume;
 
@@ -449,7 +446,7 @@ export default function TvPlayerPage() {
 
           window.speechSynthesis.speak(utterance);
 
-          const maxSafetyMs = Math.max(5000, Math.min(35000, ann.text.length * 110));
+          const maxSafetyMs = Math.max(4000, Math.min(30000, ann.text.length * 100));
           setTimeout(() => {
             if (!isFinished) resumeBackground();
           }, maxSafetyMs);
@@ -459,8 +456,25 @@ export default function TvPlayerPage() {
       };
 
       const startSpeechPlayback = () => {
-        // Priority 1: Natural Studio Voice (HD Neural Audio via Google TTS)
-        // High quality, human-like Indian accent, ultra smooth.
+        // Priority 1: Native Android TV TTS Engine (0ms instantaneous speech)
+        if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
+          try {
+            (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
+            const approxDurationMs = Math.max(3000, Math.min(25000, ann.text.length * 85));
+            setTimeout(resumeBackground, approxDurationMs);
+            return;
+          } catch (e) {
+            console.warn("AndroidSignage speak failed, falling back", e);
+          }
+        }
+
+        // Priority 2: High-Speed In-Browser SpeechSynthesis (0ms latency, zero network wait)
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          speakWithTunedSpeechSynthesis();
+          return;
+        }
+
+        // Priority 3: Fallback Network Audio Element
         const cleanLang = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi" : "en";
         const ttsUrl =
           ann.audio_url ||
@@ -472,67 +486,19 @@ export default function TvPlayerPage() {
           annAudio.src = ttsUrl;
           annAudio.volume = Math.max(0.1, Math.min(1, speechVolume));
           annAudio.onended = resumeBackground;
-
-          let didStart = false;
-          annAudio.onplaying = () => {
-            didStart = true;
-          };
-
-          // If studio voice takes longer than 1.4s (network lag or offline), seamless failover
-          const failoverTimer = setTimeout(() => {
-            if (!didStart && !isFinished) {
-              annAudio.pause();
-              // In Android TV APK, try AndroidSignage.speak first, then SpeechSynthesis
-              if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
-                try {
-                  (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
-                  const approxDurationMs = Math.max(3500, Math.min(30000, ann.text.length * 85));
-                  setTimeout(resumeBackground, approxDurationMs);
-                  return;
-                } catch {}
-              }
-              speakWithTunedSpeechSynthesis();
-            }
-          }, 1400);
-
-          annAudio.onerror = () => {
-            clearTimeout(failoverTimer);
-            if (!didStart && !isFinished) {
-              if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
-                try {
-                  (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
-                  const approxDurationMs = Math.max(3500, Math.min(30000, ann.text.length * 85));
-                  setTimeout(resumeBackground, approxDurationMs);
-                  return;
-                } catch {}
-              }
-              speakWithTunedSpeechSynthesis();
-            }
-          };
-
-          const playPromise = annAudio.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(() => {
-              clearTimeout(failoverTimer);
-              if (!didStart && !isFinished) {
-                speakWithTunedSpeechSynthesis();
-              }
-            });
-          }
+          annAudio.onerror = resumeBackground;
+          annAudio.play().catch(resumeBackground);
         } else {
-          speakWithTunedSpeechSynthesis();
+          resumeBackground();
         }
       };
 
-      // Smoothly duck background audio before speaking
+      // Immediately pause background audio cleanly before speaking
       const bgAudio = audioRef.current;
       if (bgAudio && !bgAudio.paused) {
-        wasBgPlayingRef.current = (audioIntervalSec === 0);
-        duckBackgroundAudio(bgAudio, startSpeechPlayback);
-      } else {
-        wasBgPlayingRef.current = false;
-        startSpeechPlayback();
+        bgAudio.pause();
       }
+      startSpeechPlayback();
     },
     [audioIntervalSec, isAudioMuted, manifest.voice?.settings, startAudioIntervalCountdown]
   );
@@ -754,6 +720,29 @@ export default function TvPlayerPage() {
                 }
                 return sl;
               });
+
+              // Also include any new promotions created locally that the server manifest hasn't reflected yet
+              const serverTitles = new Set(validSlides.map((s) => s.title?.toLowerCase()?.trim()));
+              const missingLocalSlides: ManifestSlide[] = localList
+                .filter((p: any) => p.status === "live" && p.enabled !== false && p.title && !serverTitles.has(p.title.toLowerCase().trim()))
+                .map((p: any) => ({
+                  id: p.id,
+                  promotion_id: p.id,
+                  title: p.title || "Offer",
+                  price_text: p.price_text,
+                  mrp: p.mrp || null,
+                  duration_sec: p.duration_sec || 8,
+                  image_url:
+                    (p.media_id && (p.media_id.startsWith("/") || p.media_id.startsWith("http") || p.media_id.startsWith("data:"))
+                      ? p.media_id
+                      : null) ||
+                    p.media?.storage_path ||
+                    p.media?.thumb_path ||
+                    "/kathua-fresh-logo.jpg",
+                }));
+              if (missingLocalSlides.length > 0) {
+                validSlides = [...missingLocalSlides, ...validSlides];
+              }
             }
           }
         }
@@ -937,7 +926,7 @@ export default function TvPlayerPage() {
 
   // Real-Time Synchronization (Version Polling + BroadcastChannel + LocalStorage)
   useEffect(() => {
-    // 1. High-frequency version polling (1000ms) for ultra-fast cross-device announcements & updates
+    // 1. Ultra high-frequency version polling (400ms) for instantaneous cross-device announcements & updates
     const versionPoll = setInterval(async () => {
       try {
         const headers: Record<string, string> = {};
@@ -981,7 +970,7 @@ export default function TvPlayerPage() {
       } catch {
         // network issue
       }
-    }, 1000);
+    }, 400);
 
     // 2. BroadcastChannel for instant 0ms real-time sync across browser tabs/windows
     let syncChannel: BroadcastChannel | null = null;
@@ -1193,13 +1182,13 @@ export default function TvPlayerPage() {
     }
   }, []);
 
-  // TV Remote D-Pad Navigation inside the Quick Menu Drawer
+  // TV Remote D-Pad Navigation inside the Quick Menu Drawer with guaranteed scrolling
   const navigateDrawerFocus = useCallback((delta: number) => {
     const drawer = document.getElementById("tv-quick-menu-drawer");
     if (!drawer) return;
     const focusables = Array.from(
       drawer.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href]:not([disabled]), [tabindex="0"]:not([disabled])'
+        '.tv-focusable:not([disabled]), button:not([disabled]), [tabindex="0"]:not([disabled])'
       )
     ).filter((el) => {
       const style = window.getComputedStyle(el);
@@ -1219,22 +1208,37 @@ export default function TvPlayerPage() {
     const target = focusables[nextIdx];
     if (target) {
       target.focus();
-      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // Directly compute scroll position so Android TV WebView & TV browsers scroll smoothly
+      const scrollBody = document.getElementById("tv-menu-scrollable-body");
+      if (scrollBody) {
+        const bodyRect = scrollBody.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        if (targetRect.top < bodyRect.top + 40) {
+          scrollBody.scrollTop -= (bodyRect.top - targetRect.top + 60);
+        } else if (targetRect.bottom > bodyRect.bottom - 40) {
+          scrollBody.scrollTop += (targetRect.bottom - bodyRect.bottom + 60);
+        }
+      } else {
+        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     }
   }, []);
 
-  // Automatically focus first item when Quick Menu opens so TV cursor is visible
+  // Automatically focus first actionable setting when Quick Menu opens so TV cursor is immediately obvious
   useEffect(() => {
     if (showQuickMenu) {
       const timer = setTimeout(() => {
-        const drawer = document.getElementById("tv-quick-menu-drawer");
-        if (drawer) {
-          const firstFocusable = drawer.querySelector<HTMLElement>(
-            'button:not([disabled]), a[href]:not([disabled]), [tabindex="0"]'
-          );
-          firstFocusable?.focus();
+        const scrollBody = document.getElementById("tv-menu-scrollable-body");
+        const firstAction = scrollBody?.querySelector<HTMLElement>(
+          '.tv-focusable:not([disabled]), button:not([disabled]), [tabindex="0"]'
+        );
+        if (firstAction) {
+          firstAction.focus();
+        } else {
+          const drawer = document.getElementById("tv-quick-menu-drawer");
+          drawer?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
         }
-      }, 80);
+      }, 90);
       return () => clearTimeout(timer);
     }
   }, [showQuickMenu]);
@@ -1266,8 +1270,34 @@ export default function TvPlayerPage() {
           navigateDrawerFocus(-1);
           return;
         }
-        // Prevent background slide transitions while inside menu
-        if (key === "ArrowRight" || key === "ArrowLeft" || code === "Space") {
+        if (key === "ArrowRight" || keyCode === 39 || keyCode === 22) {
+          e.preventDefault();
+          navigateDrawerFocus(1);
+          return;
+        }
+        if (key === "ArrowLeft" || keyCode === 37 || keyCode === 21) {
+          e.preventDefault();
+          navigateDrawerFocus(-1);
+          return;
+        }
+        if (key === "PageDown" || keyCode === 34) {
+          e.preventDefault();
+          scrollMenu(240);
+          return;
+        }
+        if (key === "PageUp" || keyCode === 33) {
+          e.preventDefault();
+          scrollMenu(-240);
+          return;
+        }
+        if (key === "Enter" || keyCode === 13 || keyCode === 23) {
+          if (document.activeElement && (document.activeElement as HTMLElement).click) {
+            e.preventDefault();
+            (document.activeElement as HTMLElement).click();
+            return;
+          }
+        }
+        if (code === "Space") {
           return;
         }
       }
@@ -1434,11 +1464,13 @@ export default function TvPlayerPage() {
             }
           }
 
-          // Calculate discount badge
+          // Calculate discount badge cleanly extracting first numeric price (handles strings like "₹25 / 1kg" safely)
           let discountText: string | null = null;
           if (displayMrp && displayPrice) {
-            const numMrp = parseFloat(displayMrp.replace(/[^0-9.]/g, ""));
-            const numPrice = parseFloat(displayPrice.replace(/[^0-9.]/g, ""));
+            const matchMrp = displayMrp.match(/([0-9]+(?:\.[0-9]+)?)/);
+            const numMrp = matchMrp ? parseFloat(matchMrp[1]) : 0;
+            const matchPrice = displayPrice.match(/([0-9]+(?:\.[0-9]+)?)/);
+            const numPrice = matchPrice ? parseFloat(matchPrice[1]) : 0;
             if (numMrp > 0 && numPrice > 0 && numMrp > numPrice) {
               const saving = Math.round(numMrp - numPrice);
               const pct = Math.round(((numMrp - numPrice) / numMrp) * 100);
@@ -2905,7 +2937,7 @@ export default function TvPlayerPage() {
                 box-shadow: 0 0 20px rgba(134, 239, 172, 1);
               }
 
-              /* High-Visibility TV Remote Cursor & Focus Styling */
+              /* Ultra High-Visibility TV Remote Cursor & Focus Styling */
               .tv-focusable {
                 outline: none !important;
                 transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
@@ -2913,12 +2945,31 @@ export default function TvPlayerPage() {
               }
               .tv-focusable:focus,
               .tv-focusable:focus-visible {
-                outline: none !important;
-                border-color: #22c55e !important;
-                background-color: rgba(34, 197, 94, 0.24) !important;
-                box-shadow: 0 0 0 3px #22c55e, 0 0 28px rgba(34, 197, 94, 0.95), inset 0 0 12px rgba(34, 197, 94, 0.3) !important;
-                transform: scale(1.025) !important;
-                z-index: 20 !important;
+                outline: 3px solid #22c55e !important;
+                outline-offset: 3px !important;
+                border-color: #4ade80 !important;
+                background-color: rgba(34, 197, 94, 0.32) !important;
+                box-shadow: 0 0 0 4px #22c55e, 0 0 35px rgba(34, 197, 94, 0.95), inset 0 0 16px rgba(34, 197, 94, 0.35) !important;
+                transform: scale(1.04) !important;
+                z-index: 50 !important;
+              }
+              .tv-focusable:focus::after,
+              .tv-focusable:focus-visible::after {
+                content: "▶ SELECTED";
+                position: absolute;
+                top: -10px;
+                right: 8px;
+                background: #22c55e;
+                color: #022c22;
+                font-size: 10px;
+                font-weight: 900;
+                padding: 2px 7px;
+                border-radius: 9999px;
+                box-shadow: 0 0 14px rgba(34, 197, 94, 0.95);
+                letter-spacing: 0.04em;
+                pointer-events: none;
+                z-index: 60;
+                animation: tvBadgePulse 0.9s infinite alternate;
               }
               .tv-cursor-badge {
                 display: none;

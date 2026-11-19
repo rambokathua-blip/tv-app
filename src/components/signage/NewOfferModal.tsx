@@ -204,7 +204,8 @@ export default function NewOfferModal({
     setImageUrl(sample.url);
     setTitle(sample.title);
     setPriceText(sample.price);
-    setMrp(sample.mrp ? sample.mrp.replace(/^₹\s*/, "") : "");
+    // Extract only clean numeric value (e.g. "35" from "₹35 / kg") so discount and strikethrough work reliably
+    setMrp(sample.mrp ? sample.mrp.replace(/[^0-9.]/g, "") : "");
   };
 
   const handleOpenSource = (isCamera: boolean) => {
@@ -249,7 +250,18 @@ export default function NewOfferModal({
     try {
       const cached = localStorage.getItem("kathua_signage_promotions");
       const list = cached ? JSON.parse(cached) : [];
-      const updated = [optimisticPromo, ...(Array.isArray(list) ? list.filter((p: any) => p.id !== "demo-onion" && p.id !== "demo-apple") : [])];
+      const targetTitle = (title || "").trim().toLowerCase();
+      const updated = [
+        optimisticPromo,
+        ...(Array.isArray(list)
+          ? list.filter(
+              (p: any) =>
+                p.id !== "demo-onion" &&
+                p.id !== "demo-apple" &&
+                (p.title || "").trim().toLowerCase() !== targetTitle
+            )
+          : []),
+      ];
       localStorage.setItem("kathua_signage_promotions", JSON.stringify(updated));
       localStorage.setItem("signage_force_refresh", Date.now().toString());
 
@@ -339,8 +351,14 @@ export default function NewOfferModal({
       try {
         const cached = localStorage.getItem("kathua_signage_promotions");
         const list = cached ? JSON.parse(cached) : [];
+        const targetTitle = (title || "").trim().toLowerCase();
         const cleaned = Array.isArray(list)
-          ? list.filter((p: any) => p.id !== tempId && p.id !== promotionId)
+          ? list.filter(
+              (p: any) =>
+                p.id !== tempId &&
+                p.id !== promotionId &&
+                (p.title || "").trim().toLowerCase() !== targetTitle
+            )
           : [];
         if (realPromo && realPromo.id) {
           localStorage.setItem(
