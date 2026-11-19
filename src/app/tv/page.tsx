@@ -358,7 +358,24 @@ export default function TvPlayerPage() {
     }
   }, [isAudioMuted, activeBroadcast]);
 
-  // High-Speed Instant Broadcast Announcement Player (0ms local, zero background sound trigger)
+  // Helper to smoothly duck background audio volume down before announcement
+  const duckBackgroundAudio = (audioEl: HTMLAudioElement, onDuckComplete: () => void) => {
+    const originalVol = audioEl.volume;
+    const steps = 6;
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      audioEl.volume = Math.max(0, originalVol * (1 - step / steps));
+      if (step >= steps) {
+        clearInterval(interval);
+        audioEl.pause();
+        audioEl.volume = originalVol; // restore for later
+        onDuckComplete();
+      }
+    }, 40);
+  };
+
+  // High-Speed & Silky Smooth Broadcast Announcement Player (HD Studio Voice + Smooth Ducking)
   const playBroadcastAnnouncement = useCallback(
     (ann: { id: string; text: string; lang?: string; audio_url?: string | null }) => {
       if (!ann || !ann.id || !ann.text || ann.id === lastBroadcastIdRef.current) return;
@@ -373,15 +390,6 @@ export default function TvPlayerPage() {
         lang: ann.lang || "hi-IN",
         audio_url: ann.audio_url || null,
       });
-
-      // ZERO-COLLISION: Completely pause background audio immediately
-      const bgAudio = audioRef.current;
-      if (bgAudio) {
-        wasBgPlayingRef.current = !bgAudio.paused && audioIntervalSec === 0;
-        bgAudio.pause();
-      } else {
-        wasBgPlayingRef.current = false;
-      }
 
       // Clear any pending audio interval countdown so it never triggers during announcement
       if (intervalCountdownRef.current) {
@@ -408,54 +416,122 @@ export default function TvPlayerPage() {
         }, 500);
       };
 
-      // FAST-PATH 1: Android TV Native TTS (0ms latency, runs in APK offline)
-      if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
-        (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
-        const approxDurationMs = Math.max(3500, Math.min(30000, ann.text.length * 85));
-        setTimeout(resumeBackground, approxDurationMs);
-        return;
-      }
+      // Helper for tuned SpeechSynthesis with warmest Indian Hindi voice
+      const speakWithTunedSpeechSynthesis = () => {
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+          resumeBackground();
+          return;
+        }
 
-      // FAST-PATH 2: Web Speech Synthesis (0ms latency in Chrome/Edge/Smart TV browsers, zero network wait)
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
         try {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(ann.text);
-          utterance.lang = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi-IN" : "en-IN";
-          utterance.rate = 1.0;
+          const langCode = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi-IN" : "en-IN";
+          utterance.lang = langCode;
+
+          // Select the best natural Indian voice if available
+          const voices = window.speechSynthesis.getVoices();
+          const bestVoice =
+            voices.find((v) => v.lang === "hi-IN" || v.lang === "hi_IN" || v.name.toLowerCase().includes("hindi") || v.name.includes("हिन्दी")) ||
+            voices.find((v) => v.lang === "en-IN" || v.name.toLowerCase().includes("india") || v.name.includes("Lekha") || v.name.includes("Rishi") || v.name.includes("Swara")) ||
+            voices.find((v) => v.lang.startsWith("hi")) ||
+            null;
+
+          if (bestVoice) {
+            utterance.voice = bestVoice;
+          }
+          utterance.rate = 0.90; // Natural, warm broadcasting cadence
+          utterance.pitch = 1.0;
           utterance.volume = speechVolume;
+
           utterance.onend = resumeBackground;
           utterance.onerror = resumeBackground;
+
           window.speechSynthesis.speak(utterance);
-          const maxSafetyMs = Math.max(4000, Math.min(30000, ann.text.length * 100));
+
+          const maxSafetyMs = Math.max(5000, Math.min(35000, ann.text.length * 110));
           setTimeout(() => {
             if (!isFinished) resumeBackground();
           }, maxSafetyMs);
-          return;
         } catch {
-          // Fallback to audio element if speech synthesis fails
+          resumeBackground();
         }
-      }
+      };
 
-      // FALLBACK PATH 3: Dedicated Announcement Audio Element
-      const langCode = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi" : "en";
-      const ttsUrl =
-        ann.audio_url ||
-        `/api/signage/admin/voice/tts?text=${encodeURIComponent(ann.text)}&lang=${langCode}`;
+      const startSpeechPlayback = () => {
+        // Priority 1: Natural Studio Voice (HD Neural Audio via Google TTS)
+        // High quality, human-like Indian accent, ultra smooth.
+        const cleanLang = (ann.lang || "hi").toLowerCase().startsWith("hi") ? "hi" : "en";
+        const ttsUrl =
+          ann.audio_url ||
+          `/api/signage/admin/voice/tts?text=${encodeURIComponent(ann.text)}&lang=${cleanLang}`;
 
-      const annAudio = announcementAudioRef.current;
-      if (annAudio) {
-        annAudio.pause();
-        annAudio.src = ttsUrl;
-        annAudio.volume = Math.max(0.1, Math.min(1, speechVolume));
-        annAudio.onended = resumeBackground;
-        annAudio.onerror = resumeBackground;
-        const playPromise = annAudio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(resumeBackground);
+        const annAudio = announcementAudioRef.current;
+        if (annAudio) {
+          annAudio.pause();
+          annAudio.src = ttsUrl;
+          annAudio.volume = Math.max(0.1, Math.min(1, speechVolume));
+          annAudio.onended = resumeBackground;
+
+          let didStart = false;
+          annAudio.onplaying = () => {
+            didStart = true;
+          };
+
+          // If studio voice takes longer than 1.4s (network lag or offline), seamless failover
+          const failoverTimer = setTimeout(() => {
+            if (!didStart && !isFinished) {
+              annAudio.pause();
+              // In Android TV APK, try AndroidSignage.speak first, then SpeechSynthesis
+              if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
+                try {
+                  (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
+                  const approxDurationMs = Math.max(3500, Math.min(30000, ann.text.length * 85));
+                  setTimeout(resumeBackground, approxDurationMs);
+                  return;
+                } catch {}
+              }
+              speakWithTunedSpeechSynthesis();
+            }
+          }, 1400);
+
+          annAudio.onerror = () => {
+            clearTimeout(failoverTimer);
+            if (!didStart && !isFinished) {
+              if (typeof window !== "undefined" && (window as any).AndroidSignage?.speak) {
+                try {
+                  (window as any).AndroidSignage.speak(ann.text, ann.lang || "hi-IN");
+                  const approxDurationMs = Math.max(3500, Math.min(30000, ann.text.length * 85));
+                  setTimeout(resumeBackground, approxDurationMs);
+                  return;
+                } catch {}
+              }
+              speakWithTunedSpeechSynthesis();
+            }
+          };
+
+          const playPromise = annAudio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(() => {
+              clearTimeout(failoverTimer);
+              if (!didStart && !isFinished) {
+                speakWithTunedSpeechSynthesis();
+              }
+            });
+          }
+        } else {
+          speakWithTunedSpeechSynthesis();
         }
+      };
+
+      // Smoothly duck background audio before speaking
+      const bgAudio = audioRef.current;
+      if (bgAudio && !bgAudio.paused) {
+        wasBgPlayingRef.current = (audioIntervalSec === 0);
+        duckBackgroundAudio(bgAudio, startSpeechPlayback);
       } else {
-        resumeBackground();
+        wasBgPlayingRef.current = false;
+        startSpeechPlayback();
       }
     },
     [audioIntervalSec, isAudioMuted, manifest.voice?.settings, startAudioIntervalCountdown]
@@ -635,13 +711,29 @@ export default function TvPlayerPage() {
     manifestVersionRef.current = manifest.version;
   }, [manifest.version]);
 
-  // Helper to enrich manifest with custom uploaded offers from local storage (offline fallback only)
+  // Helper to distinguish real user offers from generic default welcome slides
+  const isCustomSlide = useCallback((s: ManifestSlide) => {
+    const id = s.id || "";
+    const promoId = s.promotion_id || "";
+    return (
+      id !== "demo-onion" &&
+      id !== "demo-apple" &&
+      id !== "welcome-slide-1" &&
+      id !== "welcome-slide-2" &&
+      id !== "welcome-slide-brand" &&
+      promoId !== "promo-welcome-1" &&
+      promoId !== "promo-welcome-2" &&
+      promoId !== "promo-welcome-brand"
+    );
+  }, []);
+
+  // Helper to enrich manifest with custom uploaded offers from local storage (offline fallback & cold-start shield)
   const enrichWithLocalPromotions = useCallback((manifestData: SignageManifest): SignageManifest => {
-    // If server manifest already has slides from the cloud database, use them directly (cloud is source of truth)
-    if (manifestData.slides && manifestData.slides.length > 0) {
-      let validSlides = manifestData.slides.filter(
-        (s) => s.id !== "demo-onion" && s.id !== "demo-apple"
-      );
+    // 1. If server manifest already has real custom slides from cloud, prioritize them
+    const serverCustomSlides = (manifestData.slides || []).filter(isCustomSlide);
+
+    if (serverCustomSlides.length > 0) {
+      let validSlides = serverCustomSlides;
 
       // Merge local promotions MRP if server slide is missing MRP
       try {
@@ -683,15 +775,42 @@ export default function TvPlayerPage() {
           ],
         };
       }
-      if (validSlides.length > 1) {
-        return {
-          ...manifestData,
-          slides: validSlides,
-        };
-      }
+      return {
+        ...manifestData,
+        slides: validSlides,
+      };
     }
 
-    // Only if server has 0 slides, check offline local storage fallback
+    // 2. Server returned 0 custom slides (cold-start / database paused): Check cached manifest first!
+    try {
+      if (typeof window !== "undefined") {
+        const cachedRaw = localStorage.getItem("signage_cached_manifest");
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          const cachedCustom = (cached.slides || []).filter(isCustomSlide);
+          if (cachedCustom.length > 0) {
+            return {
+              ...manifestData,
+              slides: cachedCustom.length === 1
+                ? [
+                    cachedCustom[0],
+                    {
+                      id: "welcome-slide-brand",
+                      promotion_id: "promo-welcome-brand",
+                      title: "Kathua Fresh Store",
+                      price_text: "Quality Assured | Always Fresh",
+                      duration_sec: 8,
+                      image_url: "/kathua-fresh-logo.jpg",
+                    },
+                  ]
+                : cachedCustom,
+            };
+          }
+        }
+      }
+    } catch {}
+
+    // 3. Check offline local storage promotions fallback
     try {
       if (typeof window === "undefined") return manifestData;
       const raw = localStorage.getItem("kathua_signage_promotions");
@@ -762,7 +881,7 @@ export default function TvPlayerPage() {
     } catch {}
 
     return manifestData;
-  }, []);
+  }, [isCustomSlide]);
 
   // Manifest Fetching (User Screen Display Mode — No Pairing Required)
   const fetchManifest = useCallback(async (jumpToFirst = false) => {
@@ -778,7 +897,11 @@ export default function TvPlayerPage() {
         const rawData = await res.json();
         const data = enrichWithLocalPromotions(rawData);
         setManifest(data);
-        localStorage.setItem("signage_cached_manifest", JSON.stringify(data));
+        // Only cache manifest if it has real custom slides to prevent cold starts from wiping cache
+        const hasCustom = (data.slides || []).some(isCustomSlide);
+        if (hasCustom) {
+          localStorage.setItem("signage_cached_manifest", JSON.stringify(data));
+        }
         setIsOffline(false);
         if (jumpToFirst) {
           setCurrentIndex(0);
